@@ -61,7 +61,7 @@
   // Middle-truncate: keep start + end visible, ellipsis in center
   const NAME_END_LEN = 8;
   function nameParts(name: string): { start: string; end: string } {
-    // For short names the CSS flex won't overflow, so no visible truncation
+    if (name.length <= 20) return { start: name, end: "" };
     const endLen = Math.min(NAME_END_LEN, Math.floor(name.length / 3));
     if (endLen === 0) return { start: name, end: "" };
     return { start: name.slice(0, -endLen), end: name.slice(-endLen) };

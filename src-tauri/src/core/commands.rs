@@ -30,7 +30,8 @@ pub struct AppState {
     pub dir_resolve_cancel: Arc<AtomicBool>,
     pub last_result: Mutex<Option<LastCompareResult>>,
     pub dir_resolve_cache: Arc<Mutex<HashMap<DirCacheKey, DirCacheValue>>>,
-    pub pty: Mutex<Option<pty::PtyState>>,
+    pub pty_left: Mutex<Option<pty::PtyState>>,
+    pub pty_right: Mutex<Option<pty::PtyState>>,
 }
 
 pub struct LastCompareResult {
@@ -50,7 +51,8 @@ impl AppState {
             dir_resolve_cancel: Arc::new(AtomicBool::new(false)),
             last_result: Mutex::new(None),
             dir_resolve_cache: Arc::new(Mutex::new(HashMap::new())),
-            pty: Mutex::new(None),
+            pty_left: Mutex::new(None),
+            pty_right: Mutex::new(None),
         }
     }
 }
@@ -809,27 +811,39 @@ pub async fn clear_dir_resolve_cache(state: State<'_, AppState>) -> Result<(), S
 
 // --- Terminal commands ---
 
+/// Returns a reference to the PTY mutex for the given side.
+fn get_pty_mutex<'a>(state: &'a AppState, side: &str) -> Result<&'a Mutex<Option<pty::PtyState>>, String> {
+    match side {
+        "left" => Ok(&state.pty_left),
+        "right" => Ok(&state.pty_right),
+        _ => Err(format!("Invalid terminal side: {}", side)),
+    }
+}
+
 /// Spawns a PTY shell in the given working directory and starts streaming output events.
 #[tauri::command]
 pub async fn spawn_terminal(
+    side: String,
     cwd: String,
     rows: u16,
     cols: u16,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    let pty_mutex = get_pty_mutex(&state, &side)?;
     {
-        let pty_lock = state.pty.lock().unwrap();
+        let pty_lock = pty_mutex.lock().unwrap();
         if pty_lock.is_some() {
-            return Err("Terminal already running".to_string());
+            return Err(format!("Terminal already running on {} side", side));
         }
     }
 
     let (pty_state, mut reader) = pty::spawn_pty(&cwd, rows, cols)?;
     let reader_active = Arc::clone(&pty_state.reader_active);
-    *state.pty.lock().unwrap() = Some(pty_state);
+    *pty_mutex.lock().unwrap() = Some(pty_state);
 
     let app_handle = app.clone();
+    let side_clone = side.clone();
     tokio::task::spawn_blocking(move || {
         let mut buf = [0u8; 4096];
         loop {
@@ -842,13 +856,21 @@ pub async fn spawn_terminal(
                     let data = String::from_utf8_lossy(&buf[..n]).to_string();
                     let _ = app_handle.emit(
                         EVENT_TERMINAL_OUTPUT,
-                        TerminalOutputPayload { data },
+                        TerminalOutputPayload {
+                            side: side_clone.clone(),
+                            data,
+                        },
                     );
                 }
                 Err(_) => break,
             }
         }
-        let _ = app_handle.emit(EVENT_TERMINAL_EXIT, TerminalExitPayload {});
+        let _ = app_handle.emit(
+            EVENT_TERMINAL_EXIT,
+            TerminalExitPayload {
+                side: side_clone,
+            },
+        );
     });
 
     Ok(())
@@ -857,27 +879,30 @@ pub async fn spawn_terminal(
 /// Writes data (keystrokes) to the PTY stdin.
 #[tauri::command]
 pub async fn write_terminal(
+    side: String,
     data: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let pty_lock = state.pty.lock().unwrap();
+    let pty_mutex = get_pty_mutex(&state, &side)?;
+    let pty_lock = pty_mutex.lock().unwrap();
     let pty_state = pty_lock.as_ref().ok_or("No terminal running")?;
     let mut writer = pty_state.writer.lock().unwrap();
-    writer
-        .write_all(data.as_bytes())
-        .map_err(|e| e.to_string())?;
-    writer.flush().map_err(|e| e.to_string())?;
+    use std::io::Write;
+    writer.write_all(data.as_bytes()).map_err(|e: std::io::Error| e.to_string())?;
+    writer.flush().map_err(|e: std::io::Error| e.to_string())?;
     Ok(())
 }
 
 /// Notifies the PTY of a terminal size change.
 #[tauri::command]
 pub async fn resize_terminal(
+    side: String,
     rows: u16,
     cols: u16,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let pty_lock = state.pty.lock().unwrap();
+    let pty_mutex = get_pty_mutex(&state, &side)?;
+    let pty_lock = pty_mutex.lock().unwrap();
     let pty_state = pty_lock.as_ref().ok_or("No terminal running")?;
     let master = pty_state.master.lock().unwrap();
     master
@@ -893,8 +918,12 @@ pub async fn resize_terminal(
 
 /// Kills the PTY process and cleans up state.
 #[tauri::command]
-pub async fn kill_terminal(state: State<'_, AppState>) -> Result<(), String> {
-    let mut pty_lock = state.pty.lock().unwrap();
+pub async fn kill_terminal(
+    side: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let pty_mutex = get_pty_mutex(&state, &side)?;
+    let mut pty_lock = pty_mutex.lock().unwrap();
     if let Some(pty_state) = pty_lock.take() {
         pty_state
             .reader_active

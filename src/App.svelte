@@ -24,8 +24,9 @@
       const inTerminal = (e.target as HTMLElement)?.closest?.(".terminal-panel");
       if (!inTerminal) {
         e.preventDefault();
-        const cwd = compareStore.activePane === "left" ? compareStore.leftPath : compareStore.rightPath;
-        terminalStore.toggle(cwd);
+        const side = compareStore.activePane;
+        const cwd = side === "left" ? compareStore.leftPath : compareStore.rightPath;
+        terminalStore.toggle(side, cwd);
         return;
       }
     }
@@ -38,10 +39,24 @@
     if (e.key === "Tab" && !e.metaKey && !e.ctrlKey) {
       e.preventDefault();
       compareStore.switchPane();
+      // Sync terminal active side and spawn if needed
+      if (terminalStore.visible) {
+        const newSide = compareStore.activePane;
+        terminalStore.activeSide = newSide;
+        const alive = newSide === "left" ? terminalStore.leftAlive : terminalStore.rightAlive;
+        if (!alive) {
+          const cwd = newSide === "left" ? compareStore.leftPath : compareStore.rightPath;
+          terminalStore.spawn(newSide, cwd);
+        }
+      }
       return;
     }
 
     if (e.key === "Escape") {
+      // Let terminal panel handle Escape when focused there (double-Escape to close)
+      const inTerminal = (e.target as HTMLElement)?.closest?.(".terminal-panel");
+      if (inTerminal) return;
+
       if (compareStore.isRunning) {
         compareStore.cancelCompare();
       } else if (compareStore.appMode === "compare") {

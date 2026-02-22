@@ -559,7 +559,7 @@ class CompareStore {
 
   async quitApp() {
     try {
-      await terminalStore.kill();
+      await terminalStore.killAll();
     } catch {
       // Ignore terminal kill failures
     }

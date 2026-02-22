@@ -362,7 +362,7 @@ test.describe("File operations", () => {
 });
 
 test.describe("Terminal panel", () => {
-  test("backtick opens terminal, Escape closes it", async ({ page }) => {
+  test("backtick opens terminal, double-Escape closes it", async ({ page }) => {
     const panel = page.locator('[data-testid="terminal-panel"]');
 
     // Terminal should be hidden initially
@@ -372,15 +372,27 @@ test.describe("Terminal panel", () => {
     await page.keyboard.press("`");
     await expect(panel).toBeVisible();
 
-    // Escape hides terminal when focused inside it
+    // Double-Escape closes terminal (single Escape passes to shell)
+    await page.keyboard.press("Escape");
     await page.keyboard.press("Escape");
     await expect(panel).toBeHidden();
   });
 
-  test("terminal panel has drag handle", async ({ page }) => {
+  test("terminal panel has drag handle and close button", async ({ page }) => {
     await page.keyboard.press("`");
     const handle = page.locator('[data-testid="terminal-drag-handle"]');
     await expect(handle).toBeVisible();
+    const closeBtn = page.locator('[data-testid="terminal-close-btn"]');
+    await expect(closeBtn).toBeVisible();
+  });
+
+  test("close button hides terminal panel", async ({ page }) => {
+    await page.keyboard.press("`");
+    const panel = page.locator('[data-testid="terminal-panel"]');
+    await expect(panel).toBeVisible();
+
+    await page.locator('[data-testid="terminal-close-btn"]').click();
+    await expect(panel).toBeHidden();
   });
 
   test("terminal panel renders xterm container", async ({ page }) => {
@@ -388,7 +400,28 @@ test.describe("Terminal panel", () => {
     const panel = page.locator('[data-testid="terminal-panel"]');
     await expect(panel).toBeVisible();
 
-    // xterm.js creates a .xterm element inside the container
-    await expect(panel.locator(".xterm")).toBeVisible();
+    // xterm.js creates .xterm elements (one per side); check the active one is visible
+    await expect(panel.locator(".xterm").first()).toBeVisible();
+  });
+
+  test("terminal shows side label matching active pane", async ({ page }) => {
+    await page.keyboard.press("`");
+    const panel = page.locator('[data-testid="terminal-panel"]');
+    await expect(panel).toBeVisible();
+
+    // Default active pane is left
+    await expect(panel.locator(".side-label")).toHaveText("left");
+  });
+
+  test("footer shows terminal hints when terminal is open", async ({ page }) => {
+    const footer = page.locator("footer");
+
+    // Before opening terminal
+    await expect(footer.locator("text=compare")).toBeVisible();
+
+    // Open terminal
+    await page.keyboard.press("`");
+    await expect(footer.locator("text=close terminal")).toBeVisible();
+    await expect(footer.locator("text=compare")).not.toBeVisible();
   });
 });

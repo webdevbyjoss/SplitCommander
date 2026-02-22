@@ -95,7 +95,10 @@ export interface CompareDirectoryResult {
 }
 
 export interface TerminalOutputPayload {
+  side: "left" | "right";
   data: string;
 }
 
-export interface TerminalExitPayload {}
+export interface TerminalExitPayload {
+  side: "left" | "right";
+}

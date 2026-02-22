@@ -413,27 +413,32 @@ export async function injectTauriMocks(page: import("@playwright/test").Page) {
         if (cmd === "load_app_state") return null;
         if (cmd === "save_app_state") return null;
 
-        // Terminal commands
+        // Terminal commands (side-aware: "left" or "right")
         if (cmd === "spawn_terminal") {
-          (window as any).__terminalAlive = true;
+          const sideKey = `__terminalAlive_${args.side}`;
+          (window as any)[sideKey] = true;
+          const side = args.side;
           setTimeout(() => {
-            if ((window as any).__terminalAlive) {
-              emitTauriEvent("terminal-output", { data: "$ " });
+            if ((window as any)[sideKey]) {
+              emitTauriEvent("terminal-output", { side, data: "$ " });
             }
           }, 50);
           return null;
         }
         if (cmd === "write_terminal") {
-          if ((window as any).__terminalAlive) {
+          const sideKey = `__terminalAlive_${args.side}`;
+          const side = args.side;
+          if ((window as any)[sideKey]) {
             setTimeout(() => {
-              emitTauriEvent("terminal-output", { data: args.data });
+              emitTauriEvent("terminal-output", { side, data: args.data });
             }, 10);
           }
           return null;
         }
         if (cmd === "resize_terminal") return null;
         if (cmd === "kill_terminal") {
-          (window as any).__terminalAlive = false;
+          const sideKey = `__terminalAlive_${args.side}`;
+          (window as any)[sideKey] = false;
           return null;
         }
 

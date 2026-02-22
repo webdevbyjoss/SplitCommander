@@ -42,9 +42,12 @@ pub struct DirStatusResolvedPayload {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalOutputPayload {
+    pub side: String,
     pub data: String,
 }
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TerminalExitPayload {}
+pub struct TerminalExitPayload {
+    pub side: String,
+}
