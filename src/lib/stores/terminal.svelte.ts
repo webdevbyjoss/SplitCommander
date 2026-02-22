@@ -27,10 +27,15 @@ class TerminalStore {
         }
       }),
       listen<TerminalExitPayload>("terminal-exit", (event) => {
-        if (event.payload.side === "left") {
+        const side = event.payload.side;
+        if (side === "left") {
           this.leftAlive = false;
         } else {
           this.rightAlive = false;
+        }
+        // Auto-hide panel when the active side's shell exits
+        if (this.visible && this.activeSide === side) {
+          this.visible = false;
         }
       }),
     ]);

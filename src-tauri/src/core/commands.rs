@@ -832,9 +832,14 @@ pub async fn spawn_terminal(
 ) -> Result<(), String> {
     let pty_mutex = get_pty_mutex(&state, &side)?;
     {
-        let pty_lock = pty_mutex.lock().unwrap();
-        if pty_lock.is_some() {
-            return Err(format!("Terminal already running on {} side", side));
+        // Clean up any previous PTY session (e.g. shell exited via Ctrl+D / exit)
+        let mut pty_lock = pty_mutex.lock().unwrap();
+        if let Some(old) = pty_lock.take() {
+            old.reader_active
+                .store(false, std::sync::atomic::Ordering::Relaxed);
+            let mut child = old.child.lock().unwrap();
+            let _ = child.kill();
+            let _ = child.wait();
         }
     }
 

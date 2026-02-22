@@ -62,7 +62,6 @@
     <span class="key-hint"><kbd>Tab</kbd> pane</span>
     {#if terminalStore.visible}
       <span class="key-hint"><kbd>Esc Esc</kbd> close terminal</span>
-      <span class="key-hint"><kbd>q</kbd> quit</span>
     {:else if compareStore.appMode === "browse"}
       <span class="key-hint"><kbd>c</kbd> copy</span>
       <span class="key-hint"><kbd>m</kbd> move</span>
