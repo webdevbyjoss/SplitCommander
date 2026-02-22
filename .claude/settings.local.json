@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node:*)",
+      "Bash(npm --version:*)",
+      "Bash(cargo:*)",
+      "Bash(rustc:*)",
+      "Bash(rustup show:*)",
+      "Bash(npx @tauri-apps/cli@latest:*)",
+      "WebSearch",
+      "WebFetch(domain:v2.tauri.app)",
+      "Bash(rustup update:*)",
+      "Bash(npm install:*)"
+    ]
+  }
+}
