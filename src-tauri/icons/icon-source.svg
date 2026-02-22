@@ -16,8 +16,10 @@
     </filter>
   </defs>
 
-  <!-- Background — scaled 20% smaller, centered -->
-  <g transform="translate(102.4, 102.4) scale(0.8)" clip-path="url(#iconClip)">
+  <!-- Scale up 10% centered -->
+  <g transform="translate(-51.2, -51.2) scale(1.1)">
+  <!-- Background -->
+  <g clip-path="url(#iconClip)">
     <rect x="40" y="40" width="944" height="944" fill="url(#bgGrad)"/>
 
     <!-- Left pane -->
@@ -137,8 +139,7 @@
     <text x="512" y="862" text-anchor="middle" fill="rgba(255,255,255,0.85)" font-family="-apple-system, Helvetica Neue, Arial, sans-serif" font-size="44" font-weight="700" letter-spacing="1.5">SplitCommander</text>
   </g>
 
-  <!-- Outer border for icon definition — scaled to match -->
-  <g transform="translate(102.4, 102.4) scale(0.8)">
-    <rect x="40" y="40" width="944" height="944" rx="212" ry="212" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="1.5"/>
+  <!-- Outer border for icon definition -->
+  <rect x="40" y="40" width="944" height="944" rx="212" ry="212" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="1.5"/>
   </g>
 </svg>

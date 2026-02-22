@@ -204,6 +204,7 @@
 
   function handlePaneKeydown(e: KeyboardEvent) {
     if (!isActive) return;
+    if (compareStore.mkdirPromptActive) return;
 
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -258,6 +259,21 @@
       selectedIndex = Math.max(-1, selectedIndex - pageSize);
       ensureVisible(selectedIndex);
       compareStore.reportPaneState(side, selectedIndex, containerEl?.scrollTop ?? 0);
+    } else if (e.key === "c" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      if (selectedIndex >= 0 && selectedIndex < sortedEntries.length) {
+        compareStore.copySelected(selectedIndex, sortedEntries);
+      }
+    } else if (e.key === "m" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      if (selectedIndex >= 0 && selectedIndex < sortedEntries.length) {
+        compareStore.moveSelected(selectedIndex, sortedEntries);
+      }
+    } else if (e.key === "d" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      if (selectedIndex >= 0 && selectedIndex < sortedEntries.length) {
+        compareStore.deleteSelected(selectedIndex, sortedEntries);
+      }
     }
   }
 
@@ -389,6 +405,34 @@
       Modified{sortIndicator("modified")}
     </button>
   </div>
+
+  {#if isActive && compareStore.mkdirPromptActive}
+    <div class="row mkdir-prompt">
+      <span class="col-icon">
+        <svg class="kind-icon folder" viewBox="0 0 16 16"><path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h2.764c.397 0 .779.158 1.06.44l1.116 1.12c.281.28.663.44 1.06.44H13.5A1.5 1.5 0 0 1 15 5.5v7a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 12.5z"/></svg>
+      </span>
+      <!-- svelte-ignore a11y_autofocus -->
+      <input
+        class="mkdir-input"
+        type="text"
+        placeholder="New directory name..."
+        autofocus
+        bind:value={compareStore.mkdirPromptValue}
+        onkeydown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.stopPropagation();
+            compareStore.confirmMkdir();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            compareStore.cancelMkdirPrompt();
+          }
+        }}
+        data-testid="mkdir-input"
+      />
+    </div>
+  {/if}
 
   <div class="scroll-container" bind:this={containerEl} onscroll={onScroll}>
     <div class="scroll-spacer" style:height="{totalHeight}px">
@@ -687,5 +731,29 @@
     flex-shrink: 0;
     color: var(--text-secondary);
     font-size: 11px;
+  }
+
+  .mkdir-prompt {
+    display: flex;
+    align-items: center;
+    height: 28px;
+    padding: 0 10px;
+    gap: 6px;
+    background: var(--accent-dim);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .mkdir-input {
+    flex: 1;
+    background: var(--surface-1);
+    border: 1px solid var(--accent);
+    border-radius: 3px;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-family: var(--font-sans);
+    padding: 2px 6px;
+    outline: none;
+    height: 22px;
   }
 </style>

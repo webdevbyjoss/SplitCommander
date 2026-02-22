@@ -1,20 +1,35 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { compareStore } from "./lib/stores/compare.svelte";
+  import { terminalStore } from "./lib/stores/terminal.svelte";
   import BrowsePane from "./lib/components/BrowsePane.svelte";
   import ComparePane from "./lib/components/ComparePane.svelte";
   import BottomBar from "./lib/components/BottomBar.svelte";
   import ProgressIndicator from "./lib/components/ProgressIndicator.svelte";
+  import TerminalPanel from "./lib/components/TerminalPanel.svelte";
 
   onMount(() => {
     compareStore.init();
+    terminalStore.initListeners();
   });
 
   onDestroy(() => {
     compareStore.destroy();
+    terminalStore.destroy();
   });
 
   function handleKeydown(e: KeyboardEvent) {
+    // Backtick toggles terminal (unless focused in terminal panel)
+    if (e.key === "`" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const inTerminal = (e.target as HTMLElement)?.closest?.(".terminal-panel");
+      if (!inTerminal) {
+        e.preventDefault();
+        const cwd = compareStore.activePane === "left" ? compareStore.leftPath : compareStore.rightPath;
+        terminalStore.toggle(cwd);
+        return;
+      }
+    }
+
     // Skip single-letter shortcuts when typing in an input
     const inInput =
       e.target instanceof HTMLInputElement ||
@@ -37,21 +52,24 @@
 
     // Vim-style single letter shortcuts (only when not in an input)
     if (!inInput && !e.metaKey && !e.ctrlKey && !e.altKey) {
-      if (e.key === "c" && compareStore.appMode === "browse" && compareStore.canCompare) {
+      if (e.key === "g" && compareStore.appMode === "browse" && compareStore.canCompare) {
         e.preventDefault();
         compareStore.startCompare();
       } else if (e.key === "s" && compareStore.appMode === "compare") {
         e.preventDefault();
         compareStore.toggleIdentical();
-      } else if (e.key === "q" && compareStore.appMode === "compare") {
+      } else if (e.key === "q") {
         e.preventDefault();
-        compareStore.backToBrowse();
+        compareStore.quitApp();
       } else if (e.key === "r" && compareStore.appMode === "browse") {
         e.preventDefault();
         compareStore.refresh();
       } else if (e.key === "i" && compareStore.appMode === "browse") {
         e.preventDefault();
         compareStore.toggleHidden();
+      } else if (e.key === "t" && compareStore.appMode === "browse" && !compareStore.mkdirPromptActive) {
+        e.preventDefault();
+        compareStore.startMkdirPrompt();
       }
     }
   }
@@ -85,6 +103,7 @@
     <ProgressIndicator />
   </div>
 
+  <TerminalPanel />
   <BottomBar />
 </div>
 

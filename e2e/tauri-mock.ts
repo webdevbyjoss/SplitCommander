@@ -394,8 +394,48 @@ export async function injectTauriMocks(page: import("@playwright/test").Page) {
         if (cmd === "get_summary") return lastSummary;
         if (cmd === "export_report") return null;
         if (cmd === "open_file") return null;
+        if (cmd === "copy_entry") return null;
+        if (cmd === "move_entry") return null;
+        if (cmd === "create_directory") {
+          const parentEntries = fakeFS[args.parentPath];
+          if (parentEntries) {
+            parentEntries.push({
+              name: args.name,
+              kind: "dir",
+              size: 0,
+              modified: Date.now(),
+            });
+            fakeFS[args.parentPath + "/" + args.name] = [];
+          }
+          return null;
+        }
+        if (cmd === "delete_entry") return null;
         if (cmd === "load_app_state") return null;
         if (cmd === "save_app_state") return null;
+
+        // Terminal commands
+        if (cmd === "spawn_terminal") {
+          (window as any).__terminalAlive = true;
+          setTimeout(() => {
+            if ((window as any).__terminalAlive) {
+              emitTauriEvent("terminal-output", { data: "$ " });
+            }
+          }, 50);
+          return null;
+        }
+        if (cmd === "write_terminal") {
+          if ((window as any).__terminalAlive) {
+            setTimeout(() => {
+              emitTauriEvent("terminal-output", { data: args.data });
+            }, 10);
+          }
+          return null;
+        }
+        if (cmd === "resize_terminal") return null;
+        if (cmd === "kill_terminal") {
+          (window as any).__terminalAlive = false;
+          return null;
+        }
 
         // Event system: plugin:event|listen
         if (cmd === "plugin:event|listen") {
@@ -410,10 +450,13 @@ export async function injectTauriMocks(page: import("@playwright/test").Page) {
 
         // Window commands
         if (cmd === "plugin:window|show") return null;
+        if (cmd === "plugin:window|close") return null;
 
         // Dialog plugin
         if (cmd === "plugin:dialog|open") return `${HOME}/Documents`;
         if (cmd === "plugin:dialog|save") return "/tmp/test-report.json";
+        if (cmd === "plugin:dialog|ask") return true;
+        if (cmd === "plugin:dialog|message") return null;
 
         console.warn(`[tauri-mock] Unhandled command: ${cmd}`, args);
         return null;

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -10,8 +11,10 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use crate::core::compare;
 use crate::core::events::*;
 use crate::core::export;
+use crate::core::fileops;
 use crate::core::ignore::IgnoreRules;
 use crate::core::model::*;
+use crate::core::pty;
 use crate::core::scan;
 
 /// Cache key for resolved directory statuses: (left_path, right_path).
@@ -27,6 +30,7 @@ pub struct AppState {
     pub dir_resolve_cancel: Arc<AtomicBool>,
     pub last_result: Mutex<Option<LastCompareResult>>,
     pub dir_resolve_cache: Arc<Mutex<HashMap<DirCacheKey, DirCacheValue>>>,
+    pub pty: Mutex<Option<pty::PtyState>>,
 }
 
 pub struct LastCompareResult {
@@ -46,6 +50,7 @@ impl AppState {
             dir_resolve_cancel: Arc::new(AtomicBool::new(false)),
             last_result: Mutex::new(None),
             dir_resolve_cache: Arc::new(Mutex::new(HashMap::new())),
+            pty: Mutex::new(None),
         }
     }
 }
@@ -276,6 +281,73 @@ pub async fn open_file(path: String) -> Result<(), String> {
     })
     .await
     .map_err(|e| format!("Task failed: {}", e))?
+}
+
+/// Copies a file or directory from source to the destination directory.
+#[tauri::command]
+pub async fn copy_entry(source_path: String, dest_dir: String) -> Result<(), String> {
+    let src = PathBuf::from(&source_path);
+    let dst = PathBuf::from(&dest_dir);
+
+    if !src.exists() {
+        return Err(format!("Source does not exist: {}", source_path));
+    }
+    if !dst.is_dir() {
+        return Err(format!("Destination is not a directory: {}", dest_dir));
+    }
+
+    tokio::task::spawn_blocking(move || fileops::copy_entry(&src, &dst))
+        .await
+        .map_err(|e| format!("Task failed: {}", e))?
+        .map(|_| ())
+}
+
+/// Moves a file or directory from source to the destination directory.
+#[tauri::command]
+pub async fn move_entry(source_path: String, dest_dir: String) -> Result<(), String> {
+    let src = PathBuf::from(&source_path);
+    let dst = PathBuf::from(&dest_dir);
+
+    if !src.exists() {
+        return Err(format!("Source does not exist: {}", source_path));
+    }
+    if !dst.is_dir() {
+        return Err(format!("Destination is not a directory: {}", dest_dir));
+    }
+
+    tokio::task::spawn_blocking(move || fileops::move_entry(&src, &dst))
+        .await
+        .map_err(|e| format!("Task failed: {}", e))?
+        .map(|_| ())
+}
+
+/// Creates a new directory inside parent_path with the given name.
+#[tauri::command]
+pub async fn create_directory(parent_path: String, name: String) -> Result<(), String> {
+    let parent = PathBuf::from(&parent_path);
+
+    if !parent.is_dir() {
+        return Err(format!("Parent is not a directory: {}", parent_path));
+    }
+
+    tokio::task::spawn_blocking(move || fileops::create_directory(&parent, &name))
+        .await
+        .map_err(|e| format!("Task failed: {}", e))?
+        .map(|_| ())
+}
+
+/// Deletes a file or directory (recursively for directories).
+#[tauri::command]
+pub async fn delete_entry(target_path: String) -> Result<(), String> {
+    let target = PathBuf::from(&target_path);
+
+    if !target.exists() {
+        return Err(format!("Does not exist: {}", target_path));
+    }
+
+    tokio::task::spawn_blocking(move || fileops::delete_entry(&target))
+        .await
+        .map_err(|e| format!("Task failed: {}", e))?
 }
 
 /// Persisted pane state saved across app restarts.
@@ -732,6 +804,105 @@ pub async fn cancel_dir_resolve(state: State<'_, AppState>) -> Result<(), String
 #[tauri::command]
 pub async fn clear_dir_resolve_cache(state: State<'_, AppState>) -> Result<(), String> {
     state.dir_resolve_cache.lock().unwrap().clear();
+    Ok(())
+}
+
+// --- Terminal commands ---
+
+/// Spawns a PTY shell in the given working directory and starts streaming output events.
+#[tauri::command]
+pub async fn spawn_terminal(
+    cwd: String,
+    rows: u16,
+    cols: u16,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    {
+        let pty_lock = state.pty.lock().unwrap();
+        if pty_lock.is_some() {
+            return Err("Terminal already running".to_string());
+        }
+    }
+
+    let (pty_state, mut reader) = pty::spawn_pty(&cwd, rows, cols)?;
+    let reader_active = Arc::clone(&pty_state.reader_active);
+    *state.pty.lock().unwrap() = Some(pty_state);
+
+    let app_handle = app.clone();
+    tokio::task::spawn_blocking(move || {
+        let mut buf = [0u8; 4096];
+        loop {
+            if !reader_active.load(std::sync::atomic::Ordering::Relaxed) {
+                break;
+            }
+            match reader.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    let data = String::from_utf8_lossy(&buf[..n]).to_string();
+                    let _ = app_handle.emit(
+                        EVENT_TERMINAL_OUTPUT,
+                        TerminalOutputPayload { data },
+                    );
+                }
+                Err(_) => break,
+            }
+        }
+        let _ = app_handle.emit(EVENT_TERMINAL_EXIT, TerminalExitPayload {});
+    });
+
+    Ok(())
+}
+
+/// Writes data (keystrokes) to the PTY stdin.
+#[tauri::command]
+pub async fn write_terminal(
+    data: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let pty_lock = state.pty.lock().unwrap();
+    let pty_state = pty_lock.as_ref().ok_or("No terminal running")?;
+    let mut writer = pty_state.writer.lock().unwrap();
+    writer
+        .write_all(data.as_bytes())
+        .map_err(|e| e.to_string())?;
+    writer.flush().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Notifies the PTY of a terminal size change.
+#[tauri::command]
+pub async fn resize_terminal(
+    rows: u16,
+    cols: u16,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let pty_lock = state.pty.lock().unwrap();
+    let pty_state = pty_lock.as_ref().ok_or("No terminal running")?;
+    let master = pty_state.master.lock().unwrap();
+    master
+        .resize(portable_pty::PtySize {
+            rows,
+            cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(|e| format!("Resize failed: {}", e))?;
+    Ok(())
+}
+
+/// Kills the PTY process and cleans up state.
+#[tauri::command]
+pub async fn kill_terminal(state: State<'_, AppState>) -> Result<(), String> {
+    let mut pty_lock = state.pty.lock().unwrap();
+    if let Some(pty_state) = pty_lock.take() {
+        pty_state
+            .reader_active
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+        let mut child = pty_state.child.lock().unwrap();
+        let _ = child.kill();
+        let _ = child.wait();
+    }
     Ok(())
 }
 

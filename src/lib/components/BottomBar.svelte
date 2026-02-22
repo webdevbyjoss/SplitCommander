@@ -60,19 +60,21 @@
   <div class="shortcuts">
     <span class="key-hint"><kbd>Tab</kbd> pane</span>
     {#if compareStore.appMode === "browse"}
-      <span class="key-hint"><kbd>↑↓</kbd> move</span>
-      <span class="key-hint"><kbd>Enter</kbd> open</span>
-      <span class="key-hint"><kbd>Bksp</kbd> up</span>
-      <span class="key-hint"><kbd>i</kbd> hidden</span>
-      <span class="key-hint"><kbd>r</kbd> refresh</span>
-      <span class="key-hint"><kbd>c</kbd> compare</span>
+      <span class="key-hint"><kbd>c</kbd> copy</span>
+      <span class="key-hint"><kbd>m</kbd> move</span>
+      <span class="key-hint"><kbd>d</kbd> delete</span>
+      <span class="key-hint"><kbd>t</kbd> mkdir</span>
+      <span class="key-hint"><kbd>g</kbd> compare</span>
+      <span class="key-hint"><kbd>`</kbd> terminal</span>
+      <span class="key-hint"><kbd>q</kbd> quit</span>
     {:else}
       <span class="key-hint"><kbd>↑↓</kbd> move</span>
       <span class="key-hint"><kbd>Enter</kbd> open</span>
       <span class="key-hint"><kbd>Bksp</kbd> up</span>
       <span class="key-hint"><kbd>s</kbd> {compareStore.showIdentical ? "hide" : "show"} same</span>
-      <span class="key-hint"><kbd>Tab</kbd> side</span>
-      <span class="key-hint"><kbd>q</kbd> browse</span>
+      <span class="key-hint"><kbd>Esc</kbd> browse</span>
+      <span class="key-hint"><kbd>`</kbd> terminal</span>
+      <span class="key-hint"><kbd>q</kbd> quit</span>
     {/if}
   </div>
 </footer>

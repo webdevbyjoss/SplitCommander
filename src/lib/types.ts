@@ -93,3 +93,9 @@ export interface CompareDirectoryResult {
   rightPath: string;
   summary: CompareSummary;
 }
+
+export interface TerminalOutputPayload {
+  data: string;
+}
+
+export interface TerminalExitPayload {}

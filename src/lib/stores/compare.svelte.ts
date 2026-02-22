@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { open, save } from "@tauri-apps/plugin-dialog";
+import { open, save, ask } from "@tauri-apps/plugin-dialog";
 import type {
   AppMode,
   BrowseEntry,
@@ -15,6 +15,7 @@ import type {
   CompareErrorPayload,
   DirStatusResolvedPayload,
 } from "../types";
+import { terminalStore } from "./terminal.svelte";
 
 class CompareStore {
   // App mode: browse (navigate directories) or compare (diff results)
@@ -49,6 +50,10 @@ class CompareStore {
   compareSelectedIndex = $state<number>(-1);
   showIdentical = $state<boolean>(true);
   compareSummary = $state<CompareSummary | null>(null);
+
+  // Mkdir prompt state
+  mkdirPromptActive = $state(false);
+  mkdirPromptValue = $state("");
 
   // Initial pane state for restoring after app restart
   leftInitState = $state<{ selectedIndex: number; scrollTop: number } | null>(null);
@@ -444,6 +449,129 @@ class CompareStore {
     });
     if (filePath) {
       await invoke("export_report", { path: filePath });
+    }
+  }
+
+  // --- File operations ---
+
+  getOtherPanePath(): string {
+    return this.activePane === "left" ? this.rightPath : this.leftPath;
+  }
+
+  async copySelected(selectedIndex: number, sortedEntries: BrowseEntry[]) {
+    const entry = sortedEntries[selectedIndex];
+    if (!entry || selectedIndex < 0) return;
+
+    const srcDir = this.activePane === "left" ? this.leftPath : this.rightPath;
+    const srcPath = srcDir + "/" + entry.name;
+    const destDir = this.getOtherPanePath();
+
+    const yes = await ask(
+      `Copy "${entry.name}" from\n${srcDir}\nto\n${destDir}?`,
+      { title: "Copy", kind: "info" },
+    );
+    if (!yes) return;
+
+    try {
+      await invoke("copy_entry", { sourcePath: srcPath, destDir });
+      const otherSide = this.activePane === "left" ? "right" : "left";
+      await this.loadDirectory(otherSide);
+    } catch (e) {
+      this.setError(`Copy failed: ${e}`);
+    }
+  }
+
+  async moveSelected(selectedIndex: number, sortedEntries: BrowseEntry[]) {
+    const entry = sortedEntries[selectedIndex];
+    if (!entry || selectedIndex < 0) return;
+
+    const srcDir = this.activePane === "left" ? this.leftPath : this.rightPath;
+    const srcPath = srcDir + "/" + entry.name;
+    const destDir = this.getOtherPanePath();
+
+    const yes = await ask(
+      `Move "${entry.name}" from\n${srcDir}\nto\n${destDir}?`,
+      { title: "Move", kind: "warning" },
+    );
+    if (!yes) return;
+
+    try {
+      await invoke("move_entry", { sourcePath: srcPath, destDir });
+      await Promise.all([
+        this.loadDirectory("left"),
+        this.loadDirectory("right"),
+      ]);
+    } catch (e) {
+      this.setError(`Move failed: ${e}`);
+    }
+  }
+
+  async deleteSelected(selectedIndex: number, sortedEntries: BrowseEntry[]) {
+    const entry = sortedEntries[selectedIndex];
+    if (!entry || selectedIndex < 0) return;
+
+    const dir = this.activePane === "left" ? this.leftPath : this.rightPath;
+    const targetPath = dir + "/" + entry.name;
+    const typeLabel = entry.kind === "dir" ? "directory" : "file";
+
+    const yes = await ask(
+      `Delete ${typeLabel} "${entry.name}"?\n\nThis action cannot be undone.`,
+      { title: "Delete", kind: "warning" },
+    );
+    if (!yes) return;
+
+    try {
+      await invoke("delete_entry", { targetPath });
+      await this.loadDirectory(this.activePane);
+    } catch (e) {
+      this.setError(`Delete failed: ${e}`);
+    }
+  }
+
+  startMkdirPrompt() {
+    this.mkdirPromptActive = true;
+    this.mkdirPromptValue = "";
+  }
+
+  cancelMkdirPrompt() {
+    this.mkdirPromptActive = false;
+    this.mkdirPromptValue = "";
+  }
+
+  async confirmMkdir() {
+    const name = this.mkdirPromptValue.trim();
+    if (!name) {
+      this.cancelMkdirPrompt();
+      return;
+    }
+
+    const parentPath = this.activePane === "left" ? this.leftPath : this.rightPath;
+    this.mkdirPromptActive = false;
+    this.mkdirPromptValue = "";
+
+    try {
+      await invoke("create_directory", { parentPath, name });
+      await this.loadDirectory(this.activePane);
+    } catch (e) {
+      this.setError(`Create directory failed: ${e}`);
+    }
+  }
+
+  async quitApp() {
+    try {
+      await terminalStore.kill();
+    } catch {
+      // Ignore terminal kill failures
+    }
+    try {
+      await this.saveState();
+    } catch {
+      // Ignore save failures
+    }
+    try {
+      await getCurrentWindow().close();
+    } catch {
+      // Fallback: ignore
     }
   }
 }

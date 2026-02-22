@@ -229,7 +229,7 @@ test.describe("Keyboard navigation", () => {
 });
 
 test.describe("Compare mode", () => {
-  test("pressing c enters compare mode with merged rows", async ({ page }) => {
+  test("pressing g enters compare mode with merged rows", async ({ page }) => {
     const leftPane = page.locator('[data-testid="pane-left"]');
     const rightPane = page.locator('[data-testid="pane-right"]');
 
@@ -242,8 +242,8 @@ test.describe("Compare mode", () => {
     await rightPane.locator('[data-testid="row-Desktop"]').dblclick();
     await expect(rightPane.locator("text=todo.txt")).toBeVisible();
 
-    // Press 'c' to compare
-    await page.keyboard.press("c");
+    // Press 'g' to compare
+    await page.keyboard.press("g");
 
     // ComparePane should appear with merged entries
     const comparePane = page.locator('[data-testid="compare-pane"]');
@@ -259,7 +259,7 @@ test.describe("Compare mode", () => {
 
   test("double-click dir in compare mode navigates deeper", async ({ page }) => {
     // Both panes start at home — compare shows same dirs
-    await page.keyboard.press("c");
+    await page.keyboard.press("g");
 
     const comparePane = page.locator('[data-testid="compare-pane"]');
     await expect(comparePane).toBeVisible();
@@ -272,7 +272,7 @@ test.describe("Compare mode", () => {
   });
 
   test("backspace navigates up in compare mode", async ({ page }) => {
-    await page.keyboard.press("c");
+    await page.keyboard.press("g");
     const comparePane = page.locator('[data-testid="compare-pane"]');
     await expect(comparePane).toBeVisible();
 
@@ -288,7 +288,7 @@ test.describe("Compare mode", () => {
   });
 
   test("s toggles identical files in compare mode", async ({ page }) => {
-    await page.keyboard.press("c");
+    await page.keyboard.press("g");
     const comparePane = page.locator('[data-testid="compare-pane"]');
     await expect(comparePane).toBeVisible();
 
@@ -313,7 +313,7 @@ test.describe("Compare mode", () => {
 
   test("directories show spinners then resolve progressively", async ({ page }) => {
     // Both panes start at home — compare shows dirs with pending spinners
-    await page.keyboard.press("c");
+    await page.keyboard.press("g");
     const comparePane = page.locator('[data-testid="compare-pane"]');
     await expect(comparePane).toBeVisible();
 
@@ -328,15 +328,67 @@ test.describe("Compare mode", () => {
     await expect(docRow.locator('[data-testid="status-same"]')).toBeVisible();
   });
 
-  test("'q' returns to browse mode after comparison", async ({ page }) => {
-    await page.keyboard.press("c");
+  test("Escape returns to browse mode after comparison", async ({ page }) => {
+    await page.keyboard.press("g");
     await expect(page.locator('[data-testid="compare-pane"]')).toBeVisible();
 
-    // Press 'q' to go back to browse
-    await page.keyboard.press("q");
+    // Press Escape to go back to browse
+    await page.keyboard.press("Escape");
 
     // Should be back in browse mode
     await expect(page.locator('[data-testid="pane-left"]')).toBeVisible();
     await expect(page.locator('[data-testid="pane-right"]')).toBeVisible();
+  });
+});
+
+test.describe("File operations", () => {
+  test("t opens mkdir prompt and Enter creates directory", async ({ page }) => {
+    await page.keyboard.press("t");
+    const input = page.locator('[data-testid="mkdir-input"]');
+    await expect(input).toBeVisible();
+    await expect(input).toBeFocused();
+    await input.fill("new-folder");
+    await input.press("Enter");
+    await expect(input).not.toBeVisible();
+  });
+
+  test("mkdir prompt can be cancelled with Escape", async ({ page }) => {
+    await page.keyboard.press("t");
+    const input = page.locator('[data-testid="mkdir-input"]');
+    await expect(input).toBeVisible();
+    await input.press("Escape");
+    await expect(input).not.toBeVisible();
+  });
+});
+
+test.describe("Terminal panel", () => {
+  test("backtick opens terminal, Escape closes it", async ({ page }) => {
+    const panel = page.locator('[data-testid="terminal-panel"]');
+
+    // Terminal should be hidden initially
+    await expect(panel).toBeHidden();
+
+    // Press backtick to show
+    await page.keyboard.press("`");
+    await expect(panel).toBeVisible();
+
+    // Escape hides terminal when focused inside it
+    await page.keyboard.press("Escape");
+    await expect(panel).toBeHidden();
+  });
+
+  test("terminal panel has drag handle", async ({ page }) => {
+    await page.keyboard.press("`");
+    const handle = page.locator('[data-testid="terminal-drag-handle"]');
+    await expect(handle).toBeVisible();
+  });
+
+  test("terminal panel renders xterm container", async ({ page }) => {
+    await page.keyboard.press("`");
+    const panel = page.locator('[data-testid="terminal-panel"]');
+    await expect(panel).toBeVisible();
+
+    // xterm.js creates a .xterm element inside the container
+    await expect(panel.locator(".xterm")).toBeVisible();
   });
 });
