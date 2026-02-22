@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-SplitCommander is a keyboard-first, two-pane file manager for macOS with best-in-class directory comparison. Built with Tauri v2 (Rust backend) and React + TypeScript (frontend). Currently read-only (comparison only, no write operations).
+SplitCommander is a keyboard-first, two-pane file manager for macOS with directory comparison. Built with Tauri v2 (Rust backend) and Svelte 5 + TypeScript (frontend). Currently read-only (comparison only, no write operations).
 
 ## Build & Development Commands
 
@@ -18,66 +18,64 @@ npm run tauri dev
 # Build for production
 npm run tauri build
 
-# Run Rust tests
+# Run Rust tests (27 tests covering model, scanner, comparator, ignore, security, export)
 cd src-tauri && cargo test
 
 # Run a single Rust test
 cd src-tauri && cargo test test_name
 
-# Run frontend tests
-npm test
+# Check Rust compilation
+cd src-tauri && cargo check
 
-# Lint
-npm run lint
+# Lint Rust
 cd src-tauri && cargo clippy
+
+# Build frontend only
+npx vite build
+
+# Type-check Svelte/TS
+npm run check
 ```
 
 ## Architecture
 
 ### Two-process model (Tauri v2)
-- **Rust backend** (`src-tauri/`): filesystem scanning, comparison engine, hashing, event emission
-- **React frontend** (`src/`): UI rendering, receives events from Rust via Tauri event system
+- **Rust backend** (`src-tauri/src/`): filesystem scanning, comparison engine, event emission, JSON export
+- **Svelte 5 frontend** (`src/`): UI rendering, receives events from Rust via Tauri event system
 
 ### Communication pattern
-- **Commands** (UI → Rust): `select_roots`, `start_compare`, `cancel_compare`, `export_report`
-- **Events** (Rust → UI): `ScanProgress`, `DiffBatch`, `HashProgress`, `CompareDone`
+- **Commands** (UI → Rust): `set_root`, `start_compare`, `cancel_compare`, `get_diffs`, `get_summary`, `export_report`
+- **Events** (Rust → UI): `scan-progress`, `compare-done`, `compare-error`
 
 ### Rust core engine (`src-tauri/src/core/`)
 Three-phase comparison pipeline:
-1. **Scan** (`scan.rs`): Walk both roots, build `Map<RelPath, EntryMeta>`, emit early diffs (OnlyLeft, OnlyRight, TypeMismatch)
-2. **Metadata compare** (`compare.rs`): Size, mtime, symlink targets → MetaDiff or MetaSameCandidate
-3. **Deep verify** (`hash.rs`): BLAKE3 streaming hash, parallel, cancellable → Same or ContentDiff
+1. **Scan** (`scan.rs`): Walk both roots with jwalk (parallel), build `HashMap<String, EntryMeta>`, emit progress events
+2. **Metadata compare** (`compare.rs`): Diff classification → OnlyLeft, OnlyRight, TypeMismatch, Same, MetaDiff
+3. **Deep verify** (`hash.rs`): BLAKE3 hashing (planned for v0.2)
 
 Key modules:
-- `model.rs` — core types: `EntryKind`, `EntryMeta`, `Signature`, `DiffKind`, `DiffItem`, `CompareSummary`
-- `ignore.rs` — glob rules + macOS noise preset (`.DS_Store`, `._*`, `.Spotlight-V100`, `.Trashes`)
-- `security.rs` — root confinement: reject paths escaping selected roots via `..` or symlink tricks
-- `export.rs` — JSON/CSV diff report generation
-- `commands.rs` — Tauri command handlers
-- `events.rs` — event types and emit helpers
+- `model.rs` — EntryKind, EntryMeta, DiffKind, DiffItem, CompareMode, CompareSummary (all `serde(rename_all = "camelCase")`)
+- `scan.rs` — parallel directory walking with jwalk, cancellation via AtomicBool, progress callbacks
+- `compare.rs` — Structure mode (presence+type) and Smart mode (presence+type+size+mtime)
+- `ignore.rs` — glob rules + macOS noise preset (.DS_Store, ._, .Spotlight-V100, etc.)
+- `security.rs` — root confinement via canonicalize + starts_with
+- `export.rs` — JSON report generation with chrono timestamps
+- `commands.rs` — Tauri command handlers, AppState with Mutex-protected fields
+- `events.rs` — event payload types and name constants
 
-### Compare modes
-- **Structure**: presence + type only
-- **Smart** (default): presence + type + metadata (size, mtime with optional tolerance)
-- **Deep**: Smart + BLAKE3 content hashing
+### Frontend (`src/`)
+- **Svelte 5 runes** for reactive state (`$state`, `$derived`, `$effect`)
+- `lib/stores/compare.svelte.ts` — central CompareStore class with all state and actions
+- `lib/types.ts` — TypeScript mirrors of Rust model types
+- Components: TopBar, FilePane (with manual virtual scrolling), DiffBadge, DiffDetails, BottomBar, ProgressIndicator
+- FilePane implements manual windowing (ROW_HEIGHT-based) for 200k+ file lists
 
-### Diff categories
-`OnlyLeft` | `OnlyRight` | `TypeMismatch` | `Same` | `MetaDiff` | `ContentDiff` | `Error`
-
-## Key Design Decisions
-
-- **Read-only until explicit write mode**: no file modification in v0.1–v0.2
-- **Filesystem access in Rust only**: UI stays unprivileged; no Tauri FS plugin exposure
-- **Roots chosen via OS file picker**: Rust enforces path confinement to selected roots
-- **Case-insensitive path keys by default** (macOS): detect collisions (e.g., `a.txt` vs `A.txt`)
-- **Symlinks**: not followed; compared by target text (`read_link`); cycle detection deferred
-- **Parallelism**: bounded worker pool (Rayon or tokio tasks), hash queue with backpressure
-- **Every long operation accepts a cancellation token**: scan, metadata, hashing
-- **Progressive results**: structure diffs appear immediately, metadata diffs next, content diffs stream in as hashing completes
-
-## Performance Constraints
-
-- Handle 200k+ files without UI freeze
-- Structure diffs: <1s typical repos, <5s huge trees
-- Hash workers throttled to avoid thermal issues
-- Compact metadata storage with path interning (avoid full file lists in memory)
+### Key design decisions
+- **Read-only** until explicit write mode toggle
+- **Filesystem access in Rust only**: UI stays unprivileged
+- **Case-insensitive path keys** (macOS): lowercased HashMap keys, original case preserved separately
+- **Symlinks**: not followed; compared by target text
+- **Directories always Same in Smart mode** (size/mtime not meaningful for dirs)
+- **Every long operation accepts a cancellation token** (AtomicBool)
+- **Progressive results**: scan progress streams via events, diffs retrieved after compare-done
+- **Dark theme**: CSS custom properties for consistent theming

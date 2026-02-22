@@ -13,6 +13,7 @@ pub enum EntryKind {
 pub struct EntryMeta {
     pub kind: EntryKind,
     pub size: u64,
+    /// Epoch milliseconds for JS interop
     pub modified: Option<u64>,
     pub symlink_target: Option<String>,
 }
@@ -56,4 +57,55 @@ pub struct CompareSummary {
     pub same: usize,
     pub meta_diff: usize,
     pub errors: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_entry_meta_serialization_roundtrip() {
+        let meta = EntryMeta {
+            kind: EntryKind::File,
+            size: 1024,
+            modified: Some(1700000000000),
+            symlink_target: None,
+        };
+        let json = serde_json::to_string(&meta).unwrap();
+        let deserialized: EntryMeta = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.kind, EntryKind::File);
+        assert_eq!(deserialized.size, 1024);
+        assert_eq!(deserialized.modified, Some(1700000000000));
+    }
+
+    #[test]
+    fn test_diff_item_serialization() {
+        let item = DiffItem {
+            rel_path: "src/main.rs".to_string(),
+            diff_kind: DiffKind::MetaDiff,
+            left: Some(EntryMeta {
+                kind: EntryKind::File,
+                size: 100,
+                modified: Some(1000),
+                symlink_target: None,
+            }),
+            right: Some(EntryMeta {
+                kind: EntryKind::File,
+                size: 200,
+                modified: Some(2000),
+                symlink_target: None,
+            }),
+            error_message: None,
+        };
+        let json = serde_json::to_string(&item).unwrap();
+        assert!(json.contains("metaDiff"));
+        assert!(json.contains("relPath"));
+    }
+
+    #[test]
+    fn test_compare_summary_default() {
+        let summary = CompareSummary::default();
+        assert_eq!(summary.total_left, 0);
+        assert_eq!(summary.same, 0);
+    }
 }

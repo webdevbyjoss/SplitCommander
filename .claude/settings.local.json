@@ -10,7 +10,9 @@
       "WebSearch",
       "WebFetch(domain:v2.tauri.app)",
       "Bash(rustup update:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(npx vite build)",
+      "Bash(git add:*)"
     ]
   }
 }
