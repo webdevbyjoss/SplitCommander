@@ -76,7 +76,7 @@ export interface CompareEntry {
   rightSize: number | null;
   leftModified: number | null;
   rightModified: number | null;
-  dirInfo: { fileCount: number } | null;
+  dirInfo: { totalSize: number } | null;
 }
 
 export interface DirStatusResolvedPayload {
@@ -84,7 +84,7 @@ export interface DirStatusResolvedPayload {
   status: CompareStatus;
   leftPath: string;
   rightPath: string;
-  fileCount: number;
+  totalSize: number;
 }
 
 export interface CompareDirectoryResult {

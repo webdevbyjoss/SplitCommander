@@ -34,5 +34,5 @@ pub struct DirStatusResolvedPayload {
     pub status: CompareStatus,
     pub left_path: String,
     pub right_path: String,
-    pub file_count: usize,
+    pub total_size: u64,
 }

@@ -86,7 +86,7 @@ pub struct CompareEntry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DirResolveInfo {
-    pub file_count: usize,
+    pub total_size: u64,
 }
 
 #[cfg(test)]

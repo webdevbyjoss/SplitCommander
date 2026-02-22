@@ -196,7 +196,7 @@
   function statusLabel(status: string): string {
     switch (status) {
       case "same": return "same";
-      case "modified": return "mod";
+      case "modified": return "diff";
       case "onlyLeft": return "\u2190 only";
       case "onlyRight": return "only \u2192";
       case "typeMismatch": return "type!";
@@ -312,7 +312,7 @@
                 <span class="col-left-size placeholder">&mdash;</span>
               {:else}
                 <span class="col-left-name" title={entry.name}>{entry.name}</span>
-                <span class="col-left-size">{entry.kind === "dir" ? (entry.dirInfo ? `${entry.dirInfo.fileCount} files` : "\u2014") : formatSize(entry.leftSize)}</span>
+                <span class="col-left-size">{entry.kind === "dir" ? (entry.dirInfo ? formatSize(entry.dirInfo.totalSize) : "\u2014") : formatSize(entry.leftSize)}</span>
               {/if}
 
               <!-- Status badge -->
@@ -330,7 +330,7 @@
                 <span class="col-right-size placeholder">&mdash;</span>
               {:else}
                 <span class="col-right-name" title={entry.name}>{entry.name}</span>
-                <span class="col-right-size">{entry.kind === "dir" ? (entry.dirInfo ? `${entry.dirInfo.fileCount} files` : "\u2014") : formatSize(entry.rightSize)}</span>
+                <span class="col-right-size">{entry.kind === "dir" ? (entry.dirInfo ? formatSize(entry.dirInfo.totalSize) : "\u2014") : formatSize(entry.rightSize)}</span>
               {/if}
             </div>
           {/if}

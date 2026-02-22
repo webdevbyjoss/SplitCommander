@@ -14,6 +14,11 @@ use crate::core::ignore::IgnoreRules;
 use crate::core::model::*;
 use crate::core::scan;
 
+/// Cache key for resolved directory statuses: (left_path, right_path).
+pub type DirCacheKey = (String, String);
+/// Cache value: (status, total_size).
+pub type DirCacheValue = (CompareStatus, u64);
+
 /// Shared application state managed by Tauri.
 pub struct AppState {
     pub left_root: Mutex<Option<PathBuf>>,
@@ -21,6 +26,7 @@ pub struct AppState {
     pub cancel_flag: Arc<AtomicBool>,
     pub dir_resolve_cancel: Arc<AtomicBool>,
     pub last_result: Mutex<Option<LastCompareResult>>,
+    pub dir_resolve_cache: Arc<Mutex<HashMap<DirCacheKey, DirCacheValue>>>,
 }
 
 pub struct LastCompareResult {
@@ -39,6 +45,7 @@ impl AppState {
             cancel_flag: Arc::new(AtomicBool::new(false)),
             dir_resolve_cancel: Arc::new(AtomicBool::new(false)),
             last_result: Mutex::new(None),
+            dir_resolve_cache: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
@@ -330,18 +337,20 @@ pub struct CompareDirectoryResult {
 }
 
 /// Compares a single directory level from two paths, returning merged entries.
-/// Directories present on both sides are marked as Pending for later resolution.
+/// Directories present on both sides use cached status if available, otherwise marked Pending.
 #[tauri::command]
 pub async fn compare_directory(
     left_path: String,
     right_path: String,
+    state: State<'_, AppState>,
 ) -> Result<CompareDirectoryResult, String> {
     let lp = left_path.clone();
     let rp = right_path.clone();
+    let cache = Arc::clone(&state.dir_resolve_cache);
 
-    // Run on blocking thread since recursive dir comparison does I/O
+    // Run on blocking thread since dir listing does I/O
     let result = tokio::task::spawn_blocking(move || {
-        compare_directory_impl(&lp, &rp)
+        compare_directory_impl(&lp, &rp, &cache)
     })
     .await
     .map_err(|e| format!("Task failed: {}", e))?;
@@ -356,10 +365,11 @@ pub async fn compare_directory(
     })
 }
 
-/// Compare one directory level. Dirs on both sides are marked Pending (no recursion).
+/// Compare one directory level. Dirs on both sides use cache or are marked Pending.
 fn compare_directory_impl(
     left_path: &str,
     right_path: &str,
+    cache: &Arc<Mutex<HashMap<DirCacheKey, DirCacheValue>>>,
 ) -> (Vec<CompareEntry>, CompareSummary) {
     let left_entries = list_directory_impl(left_path).unwrap_or_default();
     let right_entries = list_directory_impl(right_path).unwrap_or_default();
@@ -391,7 +401,7 @@ fn compare_directory_impl(
         let left = left_map.get(key);
         let right = right_map.get(key);
 
-        let (name, kind, status, left_size, right_size, left_modified, right_modified) =
+        let (name, kind, status, left_size, right_size, left_modified, right_modified, dir_info) =
             match (left, right) {
                 (Some(l), Some(r)) => {
                     if l.kind != r.kind {
@@ -404,18 +414,42 @@ fn compare_directory_impl(
                             Some(r.size),
                             l.modified,
                             r.modified,
+                            None,
                         )
                     } else if l.kind == EntryKind::Dir {
-                        // Mark directory as pending — resolved later by resolve_dir_statuses
-                        (
-                            l.name.clone(),
-                            EntryKind::Dir,
-                            CompareStatus::Pending,
-                            None,
-                            None,
-                            l.modified,
-                            r.modified,
-                        )
+                        let sub_left = format!("{}/{}", left_path, l.name);
+                        let sub_right = format!("{}/{}", right_path, r.name);
+                        let cache_key = (sub_left, sub_right);
+                        let cached = cache.lock().unwrap().get(&cache_key).cloned();
+                        if let Some((cached_status, cached_size)) = cached {
+                            if cached_status == CompareStatus::Same {
+                                summary.same += 1;
+                            } else {
+                                summary.meta_diff += 1;
+                            }
+                            (
+                                l.name.clone(),
+                                EntryKind::Dir,
+                                cached_status,
+                                None,
+                                None,
+                                l.modified,
+                                r.modified,
+                                Some(DirResolveInfo { total_size: cached_size }),
+                            )
+                        } else {
+                            // No cache hit — mark as pending
+                            (
+                                l.name.clone(),
+                                EntryKind::Dir,
+                                CompareStatus::Pending,
+                                None,
+                                None,
+                                l.modified,
+                                r.modified,
+                                None,
+                            )
+                        }
                     } else if l.size == r.size {
                         summary.same += 1;
                         (
@@ -426,6 +460,7 @@ fn compare_directory_impl(
                             Some(r.size),
                             l.modified,
                             r.modified,
+                            None,
                         )
                     } else {
                         summary.meta_diff += 1;
@@ -437,6 +472,7 @@ fn compare_directory_impl(
                             Some(r.size),
                             l.modified,
                             r.modified,
+                            None,
                         )
                     }
                 }
@@ -450,6 +486,7 @@ fn compare_directory_impl(
                         None,
                         l.modified,
                         None,
+                        None,
                     )
                 }
                 (None, Some(r)) => {
@@ -462,6 +499,7 @@ fn compare_directory_impl(
                         Some(r.size),
                         None,
                         r.modified,
+                        None,
                     )
                 }
                 (None, None) => unreachable!(),
@@ -475,7 +513,7 @@ fn compare_directory_impl(
             right_size,
             left_modified,
             right_modified,
-            dir_info: None,
+            dir_info,
         });
     }
 
@@ -492,13 +530,13 @@ fn compare_directory_impl(
 }
 
 /// Recursively checks whether two directories have identical contents.
-/// Returns (is_same, file_count) where file_count counts files from the left side.
+/// Returns (is_same, total_size) where total_size sums file sizes from the left side.
 /// Accepts a cancellation flag that is checked between subdirectories.
 fn dirs_are_same_recursive_counted(
     left_path: &str,
     right_path: &str,
     cancel: &AtomicBool,
-) -> (bool, usize) {
+) -> (bool, u64) {
     if cancel.load(Ordering::Relaxed) {
         return (false, 0);
     }
@@ -523,20 +561,20 @@ fn dirs_are_same_recursive_counted(
         .map(|e| (e.name.to_lowercase(), (e.kind, e.size)))
         .collect();
 
-    let mut file_count = 0usize;
+    let mut total_size = 0u64;
     let mut is_same = left_map.len() == right_map.len();
 
     for (key, (l_kind, l_size)) in &left_map {
         if cancel.load(Ordering::Relaxed) {
-            return (false, file_count);
+            return (false, total_size);
         }
 
         if *l_kind != EntryKind::Dir {
-            file_count += 1;
+            total_size += l_size;
         }
 
         if !is_same {
-            // Already different, but keep counting files
+            // Already different, but keep accumulating size
             if *l_kind == EntryKind::Dir {
                 let l_name = left_entries
                     .iter()
@@ -544,8 +582,8 @@ fn dirs_are_same_recursive_counted(
                     .map(|e| &e.name)
                     .unwrap();
                 let sub_left = format!("{}/{}", left_path, l_name);
-                let (_, sub_count) = dirs_are_same_recursive_counted(&sub_left, &sub_left, cancel);
-                file_count += sub_count;
+                let (_, sub_size) = dirs_are_same_recursive_counted(&sub_left, &sub_left, cancel);
+                total_size += sub_size;
             }
             continue;
         }
@@ -570,9 +608,9 @@ fn dirs_are_same_recursive_counted(
                         .unwrap();
                     let sub_left = format!("{}/{}", left_path, l_name);
                     let sub_right = format!("{}/{}", right_path, r_name);
-                    let (sub_same, sub_count) =
+                    let (sub_same, sub_size) =
                         dirs_are_same_recursive_counted(&sub_left, &sub_right, cancel);
-                    file_count += sub_count;
+                    total_size += sub_size;
                     if !sub_same {
                         is_same = false;
                     }
@@ -583,7 +621,7 @@ fn dirs_are_same_recursive_counted(
         }
     }
 
-    (is_same, file_count)
+    (is_same, total_size)
 }
 
 /// Resolves pending directory statuses one-by-one, emitting events for each.
@@ -596,6 +634,7 @@ pub async fn resolve_dir_statuses(
 ) -> Result<(), String> {
     state.dir_resolve_cancel.store(false, Ordering::Relaxed);
     let cancel = Arc::clone(&state.dir_resolve_cancel);
+    let cache = Arc::clone(&state.dir_resolve_cache);
 
     tokio::task::spawn_blocking(move || {
         let ignore_rules = IgnoreRules::new(&[]);
@@ -631,38 +670,52 @@ pub async fn resolve_dir_statuses(
             }
         }
 
-        // Sort for consistent ordering
-        pending_dirs.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+        // Resolve all pending dirs in parallel — small dirs finish fast
+        std::thread::scope(|s| {
+            for (name, sub_left, sub_right) in pending_dirs {
+                let cancel = &cancel;
+                let cache = &cache;
+                let app = &app;
+                let left_path = &left_path;
+                let right_path = &right_path;
 
-        for (name, sub_left, sub_right) in pending_dirs {
-            if cancel.load(Ordering::Relaxed) {
-                return;
+                s.spawn(move || {
+                    if cancel.load(Ordering::Relaxed) {
+                        return;
+                    }
+
+                    let (is_same, total_size) =
+                        dirs_are_same_recursive_counted(&sub_left, &sub_right, cancel);
+
+                    if cancel.load(Ordering::Relaxed) {
+                        return;
+                    }
+
+                    let status = if is_same {
+                        CompareStatus::Same
+                    } else {
+                        CompareStatus::Modified
+                    };
+
+                    // Cache the result for reuse on re-navigation
+                    cache.lock().unwrap().insert(
+                        (sub_left, sub_right),
+                        (status, total_size),
+                    );
+
+                    let _ = app.emit(
+                        EVENT_DIR_STATUS_RESOLVED,
+                        DirStatusResolvedPayload {
+                            name,
+                            status,
+                            left_path: left_path.clone(),
+                            right_path: right_path.clone(),
+                            total_size,
+                        },
+                    );
+                });
             }
-
-            let (is_same, file_count) =
-                dirs_are_same_recursive_counted(&sub_left, &sub_right, &cancel);
-
-            if cancel.load(Ordering::Relaxed) {
-                return;
-            }
-
-            let status = if is_same {
-                CompareStatus::Same
-            } else {
-                CompareStatus::Modified
-            };
-
-            let _ = app.emit(
-                EVENT_DIR_STATUS_RESOLVED,
-                DirStatusResolvedPayload {
-                    name,
-                    status,
-                    left_path: left_path.clone(),
-                    right_path: right_path.clone(),
-                    file_count,
-                },
-            );
-        }
+        });
     });
 
     Ok(())
@@ -672,6 +725,13 @@ pub async fn resolve_dir_statuses(
 #[tauri::command]
 pub async fn cancel_dir_resolve(state: State<'_, AppState>) -> Result<(), String> {
     state.dir_resolve_cancel.store(true, Ordering::Relaxed);
+    Ok(())
+}
+
+/// Clears the directory resolve cache. Called when starting a new comparison or returning to browse.
+#[tauri::command]
+pub async fn clear_dir_resolve_cache(state: State<'_, AppState>) -> Result<(), String> {
+    state.dir_resolve_cache.lock().unwrap().clear();
     Ok(())
 }
 

@@ -20,6 +20,7 @@ pub fn run() {
             core::commands::compare_directory,
             core::commands::resolve_dir_statuses,
             core::commands::cancel_dir_resolve,
+            core::commands::clear_dir_resolve_cache,
             core::commands::load_app_state,
             core::commands::save_app_state,
         ])

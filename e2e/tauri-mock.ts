@@ -244,17 +244,17 @@ export async function injectTauriMocks(page: import("@playwright/test").Page) {
           }
 
           // Count files recursively from left side
-          function countFiles(path: string): number {
+          function calcTotalSize(path: string): number {
             const entries = fakeFS[path] || [];
-            let count = 0;
+            let size = 0;
             for (const e of entries) {
               if (e.kind === "dir") {
-                count += countFiles(`${path}/${e.name}`);
+                size += calcTotalSize(`${path}/${e.name}`);
               } else {
-                count++;
+                size += e.size;
               }
             }
-            return count;
+            return size;
           }
 
           const leftEntries = fakeFS[args.leftPath] || [];
@@ -334,7 +334,7 @@ export async function injectTauriMocks(page: import("@playwright/test").Page) {
           // Store pending dirs info for resolve_dir_statuses
           (window as any).__pendingDirs = pendingDirs;
           (window as any).__dirsAreSame = dirsAreSame;
-          (window as any).__countFiles = countFiles;
+          (window as any).__calcTotalSize = calcTotalSize;
 
           // Sort: dirs first, then alphabetically
           entries.sort((a: any, b: any) => {
@@ -359,21 +359,20 @@ export async function injectTauriMocks(page: import("@playwright/test").Page) {
         if (cmd === "resolve_dir_statuses") {
           const pendingDirs = (window as any).__pendingDirs || [];
           const dirsAreSameFn = (window as any).__dirsAreSame;
-          const countFilesFn = (window as any).__countFiles;
-          let dirResolveCancelled = false;
+          const calcTotalSizeFn = (window as any).__calcTotalSize;
           (window as any).__dirResolveCancelled = false;
 
           pendingDirs.forEach((dir: any, i: number) => {
             setTimeout(() => {
               if ((window as any).__dirResolveCancelled) return;
               const isSame = dirsAreSameFn(dir.leftPath, dir.rightPath);
-              const fileCount = countFilesFn(dir.leftPath);
+              const totalSize = calcTotalSizeFn(dir.leftPath);
               emitTauriEvent("dir-status-resolved", {
                 name: dir.name,
                 status: isSame ? "same" : "modified",
                 leftPath: args.leftPath,
                 rightPath: args.rightPath,
-                fileCount,
+                totalSize,
               });
             }, (i + 1) * 10);
           });
@@ -383,6 +382,10 @@ export async function injectTauriMocks(page: import("@playwright/test").Page) {
 
         if (cmd === "cancel_dir_resolve") {
           (window as any).__dirResolveCancelled = true;
+          return null;
+        }
+
+        if (cmd === "clear_dir_resolve_cache") {
           return null;
         }
 

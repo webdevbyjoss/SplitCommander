@@ -145,7 +145,7 @@ class CompareStore {
             return {
               ...e,
               status: p.status,
-              dirInfo: { fileCount: p.fileCount },
+              dirInfo: { totalSize: p.totalSize },
             };
           }
           return e;
@@ -269,6 +269,8 @@ class CompareStore {
   }
 
   async startCompare() {
+    // Clear cache from any previous comparison session
+    invoke("clear_dir_resolve_cache").catch(() => {});
     // Set roots from current browse paths
     this.leftRoot = this.leftPath;
     this.rightRoot = this.rightPath;
@@ -351,6 +353,7 @@ class CompareStore {
 
   backToBrowse() {
     invoke("cancel_dir_resolve").catch(() => {});
+    invoke("clear_dir_resolve_cache").catch(() => {});
     this.appMode = "browse";
     this.phase = "idle";
     this.diffs = [];
