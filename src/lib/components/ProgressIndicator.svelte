@@ -31,7 +31,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--overlay-bg);
     z-index: 10;
   }
 
@@ -44,7 +44,7 @@
     background: var(--surface-1);
     border: 1px solid var(--border);
     border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 8px 32px var(--shadow);
   }
 
   .spinner {
@@ -87,7 +87,7 @@
     cursor: pointer;
     font-size: 12px;
     font-weight: 500;
-    transition: all 0.15s;
+    transition: all 0.05s;
   }
 
   .cancel-btn:hover {

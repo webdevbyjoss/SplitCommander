@@ -1,50 +1,53 @@
 <script lang="ts">
   import { compareStore } from "../stores/compare.svelte";
 
-  const phaseLabels: Record<string, string> = {
-    idle: "Ready",
-    "scanning-left": "Scanning left\u2026",
-    "scanning-right": "Scanning right\u2026",
-    comparing: "Comparing\u2026",
-    done: "Done",
-    error: "Error",
-    cancelled: "Cancelled",
-  };
-
   function formatNumber(n: number): string {
     return n.toLocaleString();
   }
+
+  let pendingCount = $derived(
+    compareStore.compareEntries.filter((e) => e.status === "pending").length
+  );
 </script>
 
 <footer class="bottom-bar">
   <div class="status">
-    <span
-      class="phase"
-      class:running={compareStore.isRunning}
-      class:error={compareStore.phase === "error"}
-    >
-      {phaseLabels[compareStore.phase]}
-    </span>
+    {#if compareStore.loading}
+      <span class="loading-indicator" aria-label="Loading directory"><span class="mini-spinner"></span> Loading…</span>
+    {/if}
 
     {#if compareStore.isRunning}
+      <span class="phase running">
+        {compareStore.phase === "scanning-left" ? "Scanning left\u2026" : compareStore.phase === "scanning-right" ? "Scanning right\u2026" : "Comparing\u2026"}
+      </span>
       <span class="progress">
         L: {formatNumber(compareStore.scanProgress.left)} &middot; R: {formatNumber(compareStore.scanProgress.right)}
       </span>
     {/if}
 
-    {#if compareStore.summary}
+    {#if pendingCount > 0}
+      <span class="loading-indicator"><span class="mini-spinner"></span> {pendingCount} resolving</span>
+    {/if}
+
+    {#if compareStore.compareSummary}
+      <span class="summary">
+        <span class="sum-item same">{formatNumber(compareStore.compareSummary.same)} same</span>
+        <span class="sum-item only-left">{formatNumber(compareStore.compareSummary.onlyLeft)} left only</span>
+        <span class="sum-item only-right">{formatNumber(compareStore.compareSummary.onlyRight)} right only</span>
+        {#if compareStore.compareSummary.metaDiff > 0}
+          <span class="sum-item meta-diff">{formatNumber(compareStore.compareSummary.metaDiff)} modified</span>
+        {/if}
+        {#if compareStore.compareSummary.typeMismatch > 0}
+          <span class="sum-item type-mismatch">{formatNumber(compareStore.compareSummary.typeMismatch)} type mismatch</span>
+        {/if}
+      </span>
+    {:else if compareStore.phase === "done" && compareStore.summary}
       <span class="summary">
         <span class="sum-item same">{formatNumber(compareStore.summary.same)} same</span>
         <span class="sum-item only-left">{formatNumber(compareStore.summary.onlyLeft)} left only</span>
         <span class="sum-item only-right">{formatNumber(compareStore.summary.onlyRight)} right only</span>
         {#if compareStore.summary.metaDiff > 0}
           <span class="sum-item meta-diff">{formatNumber(compareStore.summary.metaDiff)} modified</span>
-        {/if}
-        {#if compareStore.summary.typeMismatch > 0}
-          <span class="sum-item type-mismatch">{formatNumber(compareStore.summary.typeMismatch)} type mismatch</span>
-        {/if}
-        {#if compareStore.summary.errors > 0}
-          <span class="sum-item errors">{formatNumber(compareStore.summary.errors)} errors</span>
         {/if}
       </span>
     {/if}
@@ -55,11 +58,21 @@
   </div>
 
   <div class="shortcuts">
-    <span class="key-hint"><kbd>Tab</kbd> switch pane</span>
-    <span class="key-hint"><kbd>{"\u2318"}D</kbd> details</span>
-    <span class="key-hint"><kbd>{"\u2318"}E</kbd> export</span>
-    {#if compareStore.phase === "done"}
-      <button class="export-btn" onclick={() => compareStore.exportReport()}>Export JSON</button>
+    <span class="key-hint"><kbd>Tab</kbd> pane</span>
+    {#if compareStore.appMode === "browse"}
+      <span class="key-hint"><kbd>↑↓</kbd> move</span>
+      <span class="key-hint"><kbd>Enter</kbd> open</span>
+      <span class="key-hint"><kbd>Bksp</kbd> up</span>
+      <span class="key-hint"><kbd>i</kbd> hidden</span>
+      <span class="key-hint"><kbd>r</kbd> refresh</span>
+      <span class="key-hint"><kbd>c</kbd> compare</span>
+    {:else}
+      <span class="key-hint"><kbd>↑↓</kbd> move</span>
+      <span class="key-hint"><kbd>Enter</kbd> open</span>
+      <span class="key-hint"><kbd>Bksp</kbd> up</span>
+      <span class="key-hint"><kbd>s</kbd> {compareStore.showIdentical ? "hide" : "show"} same</span>
+      <span class="key-hint"><kbd>Tab</kbd> side</span>
+      <span class="key-hint"><kbd>q</kbd> browse</span>
     {/if}
   </div>
 </footer>
@@ -82,6 +95,28 @@
     align-items: center;
     gap: 12px;
     min-width: 0;
+  }
+
+  .loading-indicator {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  .mini-spinner {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border: 1.5px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 
   .phase {
@@ -112,15 +147,21 @@
     font-weight: 500;
   }
 
-  .sum-item.same { color: #50c878; }
-  .sum-item.only-left { color: #ffc107; }
-  .sum-item.only-right { color: #ff9800; }
-  .sum-item.meta-diff { color: #2196f3; }
-  .sum-item.type-mismatch { color: #f44336; }
-  .sum-item.errors { color: #f44336; }
+  .sum-item.same { color: var(--diff-same); }
+  .sum-item.only-left { color: var(--diff-only-left); }
+  .sum-item.only-right { color: var(--diff-only-right); }
+  .sum-item.meta-diff { color: var(--diff-modified); }
+  .sum-item.type-mismatch { color: var(--diff-error); }
+  .sum-item.errors { color: var(--diff-error); }
 
   .error-text {
     color: var(--danger);
+    animation: toast-fade 20s ease-in forwards;
+  }
+
+  @keyframes toast-fade {
+    0%, 90% { opacity: 1; }
+    100% { opacity: 0; }
   }
 
   .shortcuts {

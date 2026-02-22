@@ -1,9 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { compareStore } from "./lib/stores/compare.svelte";
-  import TopBar from "./lib/components/TopBar.svelte";
-  import FilePane from "./lib/components/FilePane.svelte";
-  import DiffDetails from "./lib/components/DiffDetails.svelte";
+  import BrowsePane from "./lib/components/BrowsePane.svelte";
+  import ComparePane from "./lib/components/ComparePane.svelte";
   import BottomBar from "./lib/components/BottomBar.svelte";
   import ProgressIndicator from "./lib/components/ProgressIndicator.svelte";
 
@@ -16,83 +15,71 @@
   });
 
   function handleKeydown(e: KeyboardEvent) {
-    const meta = e.metaKey || e.ctrlKey;
+    // Skip single-letter shortcuts when typing in an input
+    const inInput =
+      e.target instanceof HTMLInputElement ||
+      e.target instanceof HTMLTextAreaElement;
 
-    if (e.key === "Tab" && !meta) {
+    if (e.key === "Tab" && !e.metaKey && !e.ctrlKey) {
       e.preventDefault();
       compareStore.switchPane();
-    } else if (meta && e.key === "d") {
-      e.preventDefault();
-      compareStore.toggleDetails();
-    } else if (meta && e.key === "e") {
-      e.preventDefault();
-      if (compareStore.phase === "done") {
-        compareStore.exportReport();
-      }
-    } else if (meta && e.key === "r") {
-      e.preventDefault();
-      if (compareStore.canCompare) {
-        compareStore.startCompare();
-      }
-    } else if (meta && e.key === ".") {
-      e.preventDefault();
+      return;
+    }
+
+    if (e.key === "Escape") {
       if (compareStore.isRunning) {
         compareStore.cancelCompare();
+      } else if (compareStore.appMode === "compare") {
+        compareStore.backToBrowse();
       }
-    } else if (meta && e.key === "f") {
-      e.preventDefault();
-      // Focus search — future enhancement
+      return;
+    }
+
+    // Vim-style single letter shortcuts (only when not in an input)
+    if (!inInput && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (e.key === "c" && compareStore.appMode === "browse" && compareStore.canCompare) {
+        e.preventDefault();
+        compareStore.startCompare();
+      } else if (e.key === "s" && compareStore.appMode === "compare") {
+        e.preventDefault();
+        compareStore.toggleIdentical();
+      } else if (e.key === "q" && compareStore.appMode === "compare") {
+        e.preventDefault();
+        compareStore.backToBrowse();
+      } else if (e.key === "r" && compareStore.appMode === "browse") {
+        e.preventDefault();
+        compareStore.refresh();
+      } else if (e.key === "i" && compareStore.appMode === "browse") {
+        e.preventDefault();
+        compareStore.toggleHidden();
+      }
     }
   }
 
-  let leftItems = $derived(
-    compareStore.filteredDiffs.filter(
-      (d) => d.diffKind !== "onlyRight",
-    ),
-  );
 
-  let rightItems = $derived(
-    compareStore.filteredDiffs.filter(
-      (d) => d.diffKind !== "onlyLeft",
-    ),
-  );
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
 <div class="app">
-  <TopBar />
-
   <div class="pane-area">
-    {#if compareStore.phase === "idle" && compareStore.diffs.length === 0}
-      <div class="empty-state">
-        <div class="empty-content">
-          <h2>SplitCommander</h2>
-          <p>Select two folders to compare their contents.</p>
-          <div class="empty-actions">
-            <button class="empty-btn" onclick={() => compareStore.selectRoot("left")}>
-              Select Left Folder
-            </button>
-            <button class="empty-btn" onclick={() => compareStore.selectRoot("right")}>
-              Select Right Folder
-            </button>
-          </div>
-        </div>
-      </div>
-    {:else}
-      <FilePane
+    {#if compareStore.appMode === "browse"}
+      <BrowsePane
         side="left"
-        items={leftItems}
+        path={compareStore.leftPath}
+        entries={compareStore.leftEntries}
         isActive={compareStore.activePane === "left"}
+        initialState={compareStore.leftInitState}
       />
-      <FilePane
+      <BrowsePane
         side="right"
-        items={rightItems}
+        path={compareStore.rightPath}
+        entries={compareStore.rightEntries}
         isActive={compareStore.activePane === "right"}
+        initialState={compareStore.rightInitState}
       />
-      {#if compareStore.showDetails && compareStore.selectedItem}
-        <DiffDetails item={compareStore.selectedItem} />
-      {/if}
+    {:else}
+      <ComparePane />
     {/if}
 
     <ProgressIndicator />
@@ -103,6 +90,7 @@
 
 <style>
   :global(:root) {
+    /* Dark theme (default) */
     --surface-0: #1a1a2e;
     --surface-1: #16213e;
     --surface-2: #0f3460;
@@ -112,14 +100,65 @@
     --danger: #f44336;
     --text-primary: #e0e0e0;
     --text-secondary: #8888aa;
+    --toolbar-action: var(--accent);
+    --toolbar-action-hover: var(--accent-dim);
+    --hover-bg: rgba(255, 255, 255, 0.02);
+    --overlay-bg: rgba(0, 0, 0, 0.5);
+    --shadow: rgba(0, 0, 0, 0.4);
+
+    /* Diff status colors */
+    --diff-same: #50c878;
+    --diff-same-bg: rgba(80, 200, 120, 0.15);
+    --diff-only-left: #ffc107;
+    --diff-only-left-bg: rgba(255, 193, 7, 0.15);
+    --diff-only-right: #ff9800;
+    --diff-only-right-bg: rgba(255, 152, 0, 0.15);
+    --diff-modified: #2196f3;
+    --diff-modified-bg: rgba(33, 150, 243, 0.15);
+    --diff-error: #f44336;
+    --diff-error-bg: rgba(244, 67, 54, 0.15);
+    --diff-error-strong-bg: rgba(244, 67, 54, 0.25);
+
     --font-mono: "SF Mono", "Menlo", "Monaco", "Consolas", monospace;
-    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  }
+
+  @media (prefers-color-scheme: light) {
+    :global(:root) {
+      --surface-0: #ffffff;
+      --surface-1: #fafafa;
+      --surface-2: #f0f0f2;
+      --border: #e6e6e6;
+      --accent: #007aff;
+      --accent-dim: rgba(0, 122, 255, 0.08);
+      --danger: #ff3b30;
+      --text-primary: #1d1d1f;
+      --text-secondary: #8e8e93;
+      --toolbar-action: #1d1d1f;
+      --toolbar-action-hover: rgba(0, 0, 0, 0.04);
+      --hover-bg: rgba(0, 0, 0, 0.02);
+      --overlay-bg: rgba(0, 0, 0, 0.2);
+      --shadow: rgba(0, 0, 0, 0.1);
+
+      --diff-same: #28a745;
+      --diff-same-bg: rgba(40, 167, 69, 0.1);
+      --diff-only-left: #e67e00;
+      --diff-only-left-bg: rgba(230, 126, 0, 0.1);
+      --diff-only-right: #d45400;
+      --diff-only-right-bg: rgba(212, 84, 0, 0.1);
+      --diff-modified: #007aff;
+      --diff-modified-bg: rgba(0, 122, 255, 0.08);
+      --diff-error: #ff3b30;
+      --diff-error-bg: rgba(255, 59, 48, 0.08);
+      --diff-error-strong-bg: rgba(255, 59, 48, 0.12);
+    }
   }
 
   :global(*) {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
+    outline: none;
   }
 
   :global(body) {
@@ -142,52 +181,5 @@
     flex: 1;
     min-height: 0;
     position: relative;
-  }
-
-  .empty-state {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .empty-content {
-    text-align: center;
-  }
-
-  .empty-content h2 {
-    font-size: 24px;
-    font-weight: 700;
-    color: var(--accent);
-    margin-bottom: 8px;
-  }
-
-  .empty-content p {
-    color: var(--text-secondary);
-    font-size: 14px;
-    margin-bottom: 20px;
-  }
-
-  .empty-actions {
-    display: flex;
-    gap: 12px;
-    justify-content: center;
-  }
-
-  .empty-btn {
-    padding: 8px 20px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--text-primary);
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 500;
-    transition: all 0.15s;
-  }
-
-  .empty-btn:hover {
-    border-color: var(--accent);
-    background: var(--accent-dim);
   }
 </style>

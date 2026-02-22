@@ -144,7 +144,7 @@
     font-size: 11px;
     margin-bottom: 12px;
     padding: 6px 8px;
-    background: rgba(244, 67, 54, 0.1);
+    background: var(--diff-error-bg);
     border-radius: 4px;
   }
 

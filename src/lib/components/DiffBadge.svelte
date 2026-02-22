@@ -28,32 +28,32 @@
   }
 
   .same {
-    background: rgba(80, 200, 120, 0.15);
-    color: #50c878;
+    background: var(--diff-same-bg);
+    color: var(--diff-same);
   }
 
   .onlyLeft {
-    background: rgba(255, 193, 7, 0.15);
-    color: #ffc107;
+    background: var(--diff-only-left-bg);
+    color: var(--diff-only-left);
   }
 
   .onlyRight {
-    background: rgba(255, 152, 0, 0.15);
-    color: #ff9800;
+    background: var(--diff-only-right-bg);
+    color: var(--diff-only-right);
   }
 
   .metaDiff {
-    background: rgba(33, 150, 243, 0.15);
-    color: #2196f3;
+    background: var(--diff-modified-bg);
+    color: var(--diff-modified);
   }
 
   .typeMismatch {
-    background: rgba(244, 67, 54, 0.15);
-    color: #f44336;
+    background: var(--diff-error-bg);
+    color: var(--diff-error);
   }
 
   .error {
-    background: rgba(244, 67, 54, 0.25);
-    color: #f44336;
+    background: var(--diff-error-strong-bg);
+    color: var(--diff-error);
   }
 </style>

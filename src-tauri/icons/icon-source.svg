@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <clipPath id="iconClip">
+      <rect x="40" y="40" width="944" height="944" rx="212" ry="212"/>
+    </clipPath>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0A84FF"/>
+      <stop offset="100%" stop-color="#0055D4"/>
+    </linearGradient>
+    <linearGradient id="paneGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f0f0f5"/>
+    </linearGradient>
+    <filter id="paneShadow" x="-8%" y="-4%" width="116%" height="116%">
+      <feDropShadow dx="0" dy="6" stdDeviation="16" flood-color="#002060" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <g clip-path="url(#iconClip)">
+    <rect x="40" y="40" width="944" height="944" fill="url(#bgGrad)"/>
+
+    <!-- Left pane -->
+    <g filter="url(#paneShadow)">
+      <rect x="112" y="180" width="360" height="600" rx="24" ry="24" fill="url(#paneGrad)"/>
+    </g>
+    <!-- Left pane header -->
+    <rect x="112" y="180" width="360" height="60" rx="24" ry="24" fill="#f5f5fa"/>
+    <rect x="112" y="216" width="360" height="24" fill="#f5f5fa"/>
+    <line x1="112" y1="240" x2="472" y2="240" stroke="#e0e0e8" stroke-width="1.5"/>
+    <!-- Left header dots (window controls nod) -->
+    <circle cx="148" cy="210" r="8" fill="#FF5F57"/>
+    <circle cx="172" cy="210" r="8" fill="#FEBC2E"/>
+    <circle cx="196" cy="210" r="8" fill="#28C840"/>
+
+    <!-- Left file rows -->
+    <!-- Folder rows -->
+    <rect x="136" y="256" width="24" height="20" rx="4" fill="#0A84FF" opacity="0.2"/>
+    <rect x="140" y="260" width="16" height="12" rx="2" fill="#0A84FF"/>
+    <rect x="170" y="258" width="140" height="14" rx="3" fill="#3a3a3c" opacity="0.75"/>
+    <line x1="130" y1="288" x2="458" y2="288" stroke="#e8e8ed" stroke-width="1"/>
+
+    <rect x="136" y="300" width="24" height="20" rx="4" fill="#0A84FF" opacity="0.2"/>
+    <rect x="140" y="304" width="16" height="12" rx="2" fill="#0A84FF"/>
+    <rect x="170" y="302" width="120" height="14" rx="3" fill="#3a3a3c" opacity="0.75"/>
+    <line x1="130" y1="332" x2="458" y2="332" stroke="#e8e8ed" stroke-width="1"/>
+
+    <rect x="136" y="344" width="24" height="20" rx="4" fill="#0A84FF" opacity="0.2"/>
+    <rect x="140" y="348" width="16" height="12" rx="2" fill="#0A84FF"/>
+    <rect x="170" y="346" width="100" height="14" rx="3" fill="#3a3a3c" opacity="0.75"/>
+    <line x1="130" y1="376" x2="458" y2="376" stroke="#e8e8ed" stroke-width="1"/>
+
+    <!-- Selected row -->
+    <rect x="124" y="384" width="336" height="44" rx="10" fill="rgba(0,122,255,0.12)"/>
+    <rect x="124" y="384" width="4" height="44" rx="2" fill="#0A84FF"/>
+    <rect x="136" y="392" width="24" height="20" rx="4" fill="#0A84FF" opacity="0.3"/>
+    <rect x="141" y="397" width="14" height="10" rx="2" fill="#0A84FF"/>
+    <rect x="170" y="394" width="160" height="14" rx="3" fill="#0A84FF"/>
+    <line x1="130" y1="440" x2="458" y2="440" stroke="#e8e8ed" stroke-width="1"/>
+
+    <!-- More file rows -->
+    <rect x="136" y="452" width="24" height="20" rx="4" fill="#8e8e93" opacity="0.15"/>
+    <rect x="141" y="457" width="14" height="10" rx="2" fill="#8e8e93" opacity="0.5"/>
+    <rect x="170" y="454" width="130" height="14" rx="3" fill="#8e8e93" opacity="0.45"/>
+    <line x1="130" y1="484" x2="458" y2="484" stroke="#e8e8ed" stroke-width="1"/>
+
+    <rect x="136" y="496" width="24" height="20" rx="4" fill="#8e8e93" opacity="0.15"/>
+    <rect x="141" y="501" width="14" height="10" rx="2" fill="#8e8e93" opacity="0.5"/>
+    <rect x="170" y="498" width="90" height="14" rx="3" fill="#8e8e93" opacity="0.45"/>
+    <line x1="130" y1="528" x2="458" y2="528" stroke="#e8e8ed" stroke-width="1"/>
+
+    <rect x="136" y="540" width="24" height="20" rx="4" fill="#8e8e93" opacity="0.15"/>
+    <rect x="141" y="545" width="14" height="10" rx="2" fill="#8e8e93" opacity="0.5"/>
+    <rect x="170" y="542" width="110" height="14" rx="3" fill="#8e8e93" opacity="0.35"/>
+
+
+    <!-- Right pane -->
+    <g filter="url(#paneShadow)">
+      <rect x="552" y="180" width="360" height="600" rx="24" ry="24" fill="url(#paneGrad)"/>
+    </g>
+    <!-- Right pane header -->
+    <rect x="552" y="180" width="360" height="60" rx="24" ry="24" fill="#f5f5fa"/>
+    <rect x="552" y="216" width="360" height="24" fill="#f5f5fa"/>
+    <line x1="552" y1="240" x2="912" y2="240" stroke="#e0e0e8" stroke-width="1.5"/>
+    <circle cx="588" cy="210" r="8" fill="#FF5F57"/>
+    <circle cx="612" cy="210" r="8" fill="#FEBC2E"/>
+    <circle cx="636" cy="210" r="8" fill="#28C840"/>
+
+    <!-- Right file rows -->
+    <rect x="576" y="256" width="24" height="20" rx="4" fill="#0A84FF" opacity="0.2"/>
+    <rect x="580" y="260" width="16" height="12" rx="2" fill="#0A84FF"/>
+    <rect x="610" y="258" width="140" height="14" rx="3" fill="#3a3a3c" opacity="0.75"/>
+    <line x1="570" y1="288" x2="898" y2="288" stroke="#e8e8ed" stroke-width="1"/>
+
+    <rect x="576" y="300" width="24" height="20" rx="4" fill="#0A84FF" opacity="0.2"/>
+    <rect x="580" y="304" width="16" height="12" rx="2" fill="#0A84FF"/>
+    <rect x="610" y="302" width="120" height="14" rx="3" fill="#3a3a3c" opacity="0.75"/>
+    <line x1="570" y1="332" x2="898" y2="332" stroke="#e8e8ed" stroke-width="1"/>
+
+    <rect x="576" y="344" width="24" height="20" rx="4" fill="#0A84FF" opacity="0.2"/>
+    <rect x="580" y="348" width="16" height="12" rx="2" fill="#0A84FF"/>
+    <rect x="610" y="346" width="150" height="14" rx="3" fill="#3a3a3c" opacity="0.75"/>
+    <line x1="570" y1="376" x2="898" y2="376" stroke="#e8e8ed" stroke-width="1"/>
+
+    <!-- Selected row (matching the left pane's selected) -->
+    <rect x="564" y="384" width="336" height="44" rx="10" fill="rgba(0,122,255,0.12)"/>
+    <rect x="564" y="384" width="4" height="44" rx="2" fill="#0A84FF"/>
+    <rect x="576" y="392" width="24" height="20" rx="4" fill="#0A84FF" opacity="0.3"/>
+    <rect x="581" y="397" width="14" height="10" rx="2" fill="#0A84FF"/>
+    <rect x="610" y="394" width="160" height="14" rx="3" fill="#0A84FF"/>
+    <line x1="570" y1="440" x2="898" y2="440" stroke="#e8e8ed" stroke-width="1"/>
+
+    <rect x="576" y="452" width="24" height="20" rx="4" fill="#8e8e93" opacity="0.15"/>
+    <rect x="581" y="457" width="14" height="10" rx="2" fill="#8e8e93" opacity="0.5"/>
+    <rect x="610" y="454" width="100" height="14" rx="3" fill="#8e8e93" opacity="0.45"/>
+    <line x1="570" y1="484" x2="898" y2="484" stroke="#e8e8ed" stroke-width="1"/>
+
+    <rect x="576" y="496" width="24" height="20" rx="4" fill="#8e8e93" opacity="0.15"/>
+    <rect x="581" y="501" width="14" height="10" rx="2" fill="#8e8e93" opacity="0.5"/>
+    <rect x="610" y="498" width="130" height="14" rx="3" fill="#8e8e93" opacity="0.45"/>
+    <line x1="570" y1="528" x2="898" y2="528" stroke="#e8e8ed" stroke-width="1"/>
+
+    <rect x="576" y="540" width="24" height="20" rx="4" fill="#8e8e93" opacity="0.15"/>
+    <rect x="581" y="545" width="14" height="10" rx="2" fill="#8e8e93" opacity="0.5"/>
+    <rect x="610" y="542" width="80" height="14" rx="3" fill="#8e8e93" opacity="0.35"/>
+
+
+    <!-- Center compare symbol: two opposing arrows -->
+    <g opacity="0.95">
+      <!-- Left arrow -->
+      <path d="M490 386 L510 406 L490 426" fill="none" stroke="white" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+      <!-- Right arrow -->
+      <path d="M534 386 L514 406 L534 426" fill="none" stroke="white" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+
+    <!-- App name -->
+    <text x="512" y="862" text-anchor="middle" fill="rgba(255,255,255,0.85)" font-family="-apple-system, Helvetica Neue, Arial, sans-serif" font-size="44" font-weight="700" letter-spacing="1.5">SplitCommander</text>
+  </g>
+
+  <!-- Outer border for icon definition -->
+  <rect x="40" y="40" width="944" height="944" rx="212" ry="212" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="1.5"/>
+</svg>

@@ -119,14 +119,9 @@ fn classify_pair(
             }
 
             let size_match = left.size == right.size;
-            let mtime_match = match (left.modified, right.modified) {
-                (Some(l), Some(r)) => l == r,
-                (None, None) => true,
-                _ => false,
-            };
             let symlink_match = left.symlink_target == right.symlink_target;
 
-            if size_match && mtime_match && symlink_match {
+            if size_match && symlink_match {
                 summary.same += 1;
                 DiffItem {
                     rel_path: rel_path.to_string(),
@@ -248,13 +243,14 @@ mod tests {
     }
 
     #[test]
-    fn test_meta_diff_mtime() {
+    fn test_same_size_different_mtime_is_same() {
         let left = make_scan(vec![("file.txt", file_meta(100, 1000))]);
         let right = make_scan(vec![("file.txt", file_meta(100, 2000))]);
         let cancel = no_cancel();
 
         let result = compare(&left, &right, CompareMode::Smart, &cancel).unwrap();
-        assert_eq!(result.summary.meta_diff, 1);
+        assert_eq!(result.summary.same, 1);
+        assert_eq!(result.diffs[0].diff_kind, DiffKind::Same);
     }
 
     #[test]

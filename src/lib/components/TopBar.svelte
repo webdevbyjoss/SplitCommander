@@ -1,36 +1,15 @@
 <script lang="ts">
   import { compareStore } from "../stores/compare.svelte";
-
-  function truncatePath(path: string | null, maxLen = 40): string {
-    if (!path) return "Select folder\u2026";
-    if (path.length <= maxLen) return path;
-    return "\u2026" + path.slice(-maxLen + 1);
-  }
 </script>
 
 <header class="top-bar">
-  <div class="root-selectors">
-    <button
-      class="root-btn"
-      class:selected={compareStore.leftRoot !== null}
-      onclick={() => compareStore.selectRoot("left")}
-      title={compareStore.leftRoot ?? "Select left folder"}
-    >
-      <span class="side-label">L</span>
-      <span class="path-text">{truncatePath(compareStore.leftRoot)}</span>
-    </button>
-    <button
-      class="root-btn"
-      class:selected={compareStore.rightRoot !== null}
-      onclick={() => compareStore.selectRoot("right")}
-      title={compareStore.rightRoot ?? "Select right folder"}
-    >
-      <span class="side-label">R</span>
-      <span class="path-text">{truncatePath(compareStore.rightRoot)}</span>
-    </button>
-  </div>
-
   <div class="controls">
+    {#if compareStore.appMode === "compare"}
+      <button class="action-btn back" onclick={() => compareStore.backToBrowse()}>
+        Browse
+      </button>
+    {/if}
+
     <div class="mode-toggle">
       <button
         class="mode-btn"
@@ -68,66 +47,19 @@
   .top-bar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    height: 48px;
+    justify-content: flex-end;
+    height: 36px;
     padding: 0 12px;
     background: var(--surface-1);
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
-    gap: 12px;
-  }
-
-  .root-selectors {
-    display: flex;
     gap: 8px;
-    flex: 1;
-    min-width: 0;
-  }
-
-  .root-btn {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--text-secondary);
-    cursor: pointer;
-    font-size: 12px;
-    font-family: var(--font-mono);
-    max-width: 50%;
-    min-width: 0;
-    overflow: hidden;
-    transition: border-color 0.15s;
-  }
-
-  .root-btn:hover {
-    border-color: var(--accent);
-  }
-
-  .root-btn.selected {
-    color: var(--text-primary);
-    border-color: var(--accent-dim);
-  }
-
-  .side-label {
-    font-weight: 700;
-    color: var(--accent);
-    flex-shrink: 0;
-  }
-
-  .path-text {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .controls {
     display: flex;
     align-items: center;
     gap: 8px;
-    flex-shrink: 0;
   }
 
   .mode-toggle {
@@ -138,14 +70,14 @@
   }
 
   .mode-btn {
-    padding: 4px 10px;
+    padding: 3px 10px;
     background: var(--surface-2);
     border: none;
     color: var(--text-secondary);
     cursor: pointer;
     font-size: 11px;
     font-weight: 500;
-    transition: all 0.15s;
+    transition: all 0.05s;
   }
 
   .mode-btn:first-child {
@@ -158,13 +90,13 @@
   }
 
   .action-btn {
-    padding: 5px 14px;
+    padding: 4px 12px;
     border: none;
     border-radius: 6px;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     cursor: pointer;
-    transition: opacity 0.15s;
+    transition: opacity 0.05s;
   }
 
   .action-btn:disabled {
@@ -180,5 +112,15 @@
   .action-btn.cancel {
     background: var(--danger);
     color: white;
+  }
+
+  .action-btn.back {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+  }
+
+  .action-btn.back:hover {
+    border-color: var(--accent);
   }
 </style>

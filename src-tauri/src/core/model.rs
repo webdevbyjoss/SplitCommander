@@ -59,6 +59,36 @@ pub struct CompareSummary {
     pub errors: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CompareStatus {
+    Same,
+    Modified,
+    OnlyLeft,
+    OnlyRight,
+    TypeMismatch,
+    Pending,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompareEntry {
+    pub name: String,
+    pub kind: EntryKind,
+    pub status: CompareStatus,
+    pub left_size: Option<u64>,
+    pub right_size: Option<u64>,
+    pub left_modified: Option<u64>,
+    pub right_modified: Option<u64>,
+    pub dir_info: Option<DirResolveInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DirResolveInfo {
+    pub file_count: usize,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

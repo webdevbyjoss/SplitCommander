@@ -23,8 +23,6 @@ export interface DiffItem {
   errorMessage: string | null;
 }
 
-export type CompareMode = "structure" | "smart";
-
 export interface CompareSummary {
   totalLeft: number;
   totalRight: number;
@@ -58,3 +56,40 @@ export type ComparePhase =
   | "done"
   | "error"
   | "cancelled";
+
+export interface BrowseEntry {
+  name: string;
+  kind: EntryKind;
+  size: number;
+  modified: number | null;
+}
+
+export type AppMode = "browse" | "compare";
+
+export type CompareStatus = "same" | "modified" | "onlyLeft" | "onlyRight" | "typeMismatch" | "pending";
+
+export interface CompareEntry {
+  name: string;
+  kind: EntryKind;
+  status: CompareStatus;
+  leftSize: number | null;
+  rightSize: number | null;
+  leftModified: number | null;
+  rightModified: number | null;
+  dirInfo: { fileCount: number } | null;
+}
+
+export interface DirStatusResolvedPayload {
+  name: string;
+  status: CompareStatus;
+  leftPath: string;
+  rightPath: string;
+  fileCount: number;
+}
+
+export interface CompareDirectoryResult {
+  entries: CompareEntry[];
+  leftPath: string;
+  rightPath: string;
+  summary: CompareSummary;
+}
