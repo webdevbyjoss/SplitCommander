@@ -1,11 +1,18 @@
 <script lang="ts">
-  import type { CompareEntry } from "../types";
+  import type { CompareEntry, SyncAction } from "../types";
   import { compareStore } from "../stores/compare.svelte";
 
   const ROW_HEIGHT = 28;
   const OVERSCAN = 10;
 
   let activeSide = $state<"left" | "right">("left");
+
+  // Action menu state
+  let actionMenuOpen = $state(false);
+  let actionMenuActions = $state<SyncAction[]>([]);
+  let actionMenuSelectedIndex = $state(0);
+  let confirmAction = $state<SyncAction | null>(null);
+  let executing = $state(false);
 
   let containerEl: HTMLDivElement | undefined = $state();
   let scrollTop = $state(0);
@@ -71,11 +78,60 @@
     }
   }
 
-  function handleKeydown(e: KeyboardEvent) {
+  async function handleKeydown(e: KeyboardEvent) {
     const inInput =
       e.target instanceof HTMLInputElement ||
       e.target instanceof HTMLTextAreaElement;
     if (inInput) return;
+
+    // Confirmation prompt handling
+    if (confirmAction) {
+      e.preventDefault();
+      if (e.key === "y" || e.key === "Y") {
+        const action = confirmAction;
+        confirmAction = null;
+        executing = true;
+        await compareStore.executeSyncAction(action);
+        executing = false;
+      } else if (e.key === "n" || e.key === "N" || e.key === "Escape") {
+        confirmAction = null;
+      }
+      return;
+    }
+
+    // Action menu navigation
+    if (actionMenuOpen) {
+      e.preventDefault();
+      if (e.key === "Escape") {
+        actionMenuOpen = false;
+        return;
+      }
+      if (e.key === "ArrowDown") {
+        actionMenuSelectedIndex = Math.min(actionMenuActions.length - 1, actionMenuSelectedIndex + 1);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        actionMenuSelectedIndex = Math.max(0, actionMenuSelectedIndex - 1);
+        return;
+      }
+      if (e.key === "Enter") {
+        const action = actionMenuActions[actionMenuSelectedIndex];
+        if (action) {
+          actionMenuOpen = false;
+          confirmAction = action;
+        }
+        return;
+      }
+      // Number key selection (1-based)
+      const num = parseInt(e.key);
+      if (num >= 1 && num <= actionMenuActions.length) {
+        const action = actionMenuActions[num - 1];
+        actionMenuOpen = false;
+        confirmAction = action;
+        return;
+      }
+      return;
+    }
 
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -102,14 +158,20 @@
         }
       } else {
         const entry = entries[compareStore.compareSelectedIndex];
-        if (entry && entry.kind === "dir") {
+        if (!entry) return;
+        const actions = compareStore.getSyncActions(entry);
+        if (actions.length > 0) {
+          // Open action menu
+          actionMenuActions = actions;
+          actionMenuSelectedIndex = 0;
+          actionMenuOpen = true;
+        } else if (entry.kind === "dir") {
           navHistory.set(compareStore.compareRelPath, {
             selectedIndex: compareStore.compareSelectedIndex,
             scrollTop: containerEl?.scrollTop ?? 0,
           });
           compareStore.navigateCompareDir(entry.name);
-        } else if (entry && entry.kind === "file") {
-          // Open file from active side
+        } else if (entry.kind === "file") {
           const side = activeSide;
           if (entry.status === "onlyRight" && side === "left") {
             compareStore.openFile("right", buildFilePath(entry.name));
@@ -130,8 +192,6 @@
         compareStore.navigateCompareUp();
       }
     } else if (e.key === "Tab" && !e.metaKey && !e.ctrlKey) {
-      // Tab switches active side (handled by App.svelte switchPane,
-      // but we also toggle our local activeSide)
       activeSide = activeSide === "left" ? "right" : "left";
     } else if (e.key === "Home") {
       e.preventDefault();
@@ -229,6 +289,13 @@
     compareStore.compareSelectedIndex = -1;
     compareStore.loadCompareDirectory();
   }
+
+  // Close action menu when navigating away
+  $effect(() => {
+    compareStore.compareRelPath;
+    actionMenuOpen = false;
+    confirmAction = null;
+  });
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -338,6 +405,41 @@
       </div>
     </div>
   </div>
+
+  {#if actionMenuOpen}
+    <div class="action-menu-overlay" role="dialog">
+      <div class="action-menu">
+        <div class="action-menu-title">{actionMenuActions[0]?.entryName}</div>
+        {#each actionMenuActions as action, i}
+          <button
+            class="action-menu-item"
+            class:selected={i === actionMenuSelectedIndex}
+            onclick={() => { actionMenuOpen = false; confirmAction = action; }}
+          >
+            <span class="action-num">{i + 1}</span>
+            {action.label}
+          </button>
+        {/each}
+        <div class="action-menu-hint">Esc cancel</div>
+      </div>
+    </div>
+  {/if}
+
+  {#if confirmAction}
+    <div class="action-menu-overlay" role="dialog">
+      <div class="action-menu confirm">
+        <div class="action-menu-title">{confirmAction.label}</div>
+        <div class="confirm-target">{confirmAction.entryName}</div>
+        <div class="confirm-prompt">
+          {#if executing}
+            <span class="mini-spinner"></span> Executing...
+          {:else}
+            Press <kbd>y</kbd> to confirm, <kbd>n</kbd> to cancel
+          {/if}
+        </div>
+      </div>
+    </div>
+  {/if}
 </section>
 
 <style>
@@ -614,5 +716,114 @@
   .placeholder {
     font-style: italic;
     opacity: 0.3;
+  }
+
+  .action-menu-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--overlay-bg);
+    z-index: 100;
+  }
+
+  .action-menu {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 0;
+    min-width: 220px;
+    box-shadow: 0 8px 24px var(--shadow);
+  }
+
+  .action-menu-title {
+    padding: 4px 16px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4px;
+  }
+
+  .action-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 16px;
+    border: none;
+    background: none;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .action-menu-item:hover,
+  .action-menu-item.selected {
+    background: var(--accent-dim);
+  }
+
+  .action-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  .action-menu-hint {
+    padding: 6px 16px 2px;
+    font-size: 10px;
+    color: var(--text-secondary);
+    border-top: 1px solid var(--border);
+    margin-top: 4px;
+  }
+
+  .action-menu.confirm {
+    padding: 16px;
+    text-align: center;
+  }
+
+  .action-menu.confirm .action-menu-title {
+    border-bottom: none;
+    padding: 0 0 4px;
+    text-align: center;
+  }
+
+  .confirm-target {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--accent);
+    padding: 4px 0 12px;
+  }
+
+  .confirm-prompt {
+    font-size: 11px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  .confirm-prompt kbd {
+    display: inline-block;
+    padding: 0 4px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1.4;
   }
 </style>
