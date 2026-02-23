@@ -8,6 +8,20 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator('[data-testid="pane-left"] .row')).not.toHaveCount(0);
 });
 
+/**
+ * Navigate right pane to /Users/mirror (same content as HOME, different path)
+ * so canCompare passes. Left pane stays at HOME.
+ */
+async function setupMirrorForCompare(page: import("@playwright/test").Page) {
+  const rightPane = page.locator('[data-testid="pane-right"]');
+  await page.keyboard.press("Tab"); // switch to right pane
+  await rightPane.locator('[data-testid="row-parent"]').dblclick(); // up to /Users
+  await expect(rightPane.locator('[data-testid="row-mirror"]')).toBeVisible();
+  await rightPane.locator('[data-testid="row-mirror"]').dblclick(); // into /Users/mirror
+  await expect(rightPane.locator('[data-testid="row-Documents"]')).toBeVisible();
+  await page.keyboard.press("Tab"); // back to left pane
+}
+
 test.describe("App startup", () => {
   test("renders folder picker buttons in breadcrumb bars", async ({ page }) => {
     const leftPicker = page.locator('[data-testid="pane-left"] .picker-btn');
@@ -258,7 +272,7 @@ test.describe("Compare mode", () => {
   });
 
   test("double-click dir in compare mode navigates deeper", async ({ page }) => {
-    // Both panes start at home — compare shows same dirs
+    await setupMirrorForCompare(page);
     await page.keyboard.press("g");
 
     const comparePane = page.locator('[data-testid="compare-pane"]');
@@ -272,6 +286,7 @@ test.describe("Compare mode", () => {
   });
 
   test("backspace navigates up in compare mode", async ({ page }) => {
+    await setupMirrorForCompare(page);
     await page.keyboard.press("g");
     const comparePane = page.locator('[data-testid="compare-pane"]');
     await expect(comparePane).toBeVisible();
@@ -288,6 +303,7 @@ test.describe("Compare mode", () => {
   });
 
   test("s toggles identical files in compare mode", async ({ page }) => {
+    await setupMirrorForCompare(page);
     await page.keyboard.press("g");
     const comparePane = page.locator('[data-testid="compare-pane"]');
     await expect(comparePane).toBeVisible();
@@ -312,7 +328,7 @@ test.describe("Compare mode", () => {
   });
 
   test("directories show spinners then resolve progressively", async ({ page }) => {
-    // Both panes start at home — compare shows dirs with pending spinners
+    await setupMirrorForCompare(page);
     await page.keyboard.press("g");
     const comparePane = page.locator('[data-testid="compare-pane"]');
     await expect(comparePane).toBeVisible();
@@ -329,6 +345,7 @@ test.describe("Compare mode", () => {
   });
 
   test("Escape returns to browse mode after comparison", async ({ page }) => {
+    await setupMirrorForCompare(page);
     await page.keyboard.press("g");
     await expect(page.locator('[data-testid="compare-pane"]')).toBeVisible();
 
@@ -338,6 +355,125 @@ test.describe("Compare mode", () => {
     // Should be back in browse mode
     await expect(page.locator('[data-testid="pane-left"]')).toBeVisible();
     await expect(page.locator('[data-testid="pane-right"]')).toBeVisible();
+  });
+});
+
+test.describe("Compare mode navigation memory", () => {
+  test("Enter on directory navigates into it and Backspace returns with selection preserved", async ({ page }) => {
+    await setupMirrorForCompare(page);
+    await page.keyboard.press("g");
+    const comparePane = page.locator('[data-testid="compare-pane"]');
+    await expect(comparePane).toBeVisible();
+    await expect(comparePane.locator('[data-testid="status-pending"]')).toHaveCount(0);
+
+    // Arrow down to Documents (dirs sorted: Desktop, Documents, ...)
+    await page.keyboard.press("ArrowDown"); // Desktop
+    await page.keyboard.press("ArrowDown"); // Documents
+    await expect(comparePane.locator('[data-testid="compare-row-Documents"].selected')).toBeVisible();
+
+    // Enter to navigate into Documents
+    await page.keyboard.press("Enter");
+    await expect(comparePane.locator('[data-testid="compare-row-report.pdf"]')).toBeVisible();
+
+    // Backspace to go back
+    await page.keyboard.press("Backspace");
+
+    // Documents should be re-selected
+    await expect(comparePane.locator('[data-testid="compare-row-Documents"].selected')).toBeVisible();
+  });
+
+  test("double-click into directory and '..' Enter returns with selection preserved", async ({ page }) => {
+    await setupMirrorForCompare(page);
+    await page.keyboard.press("g");
+    const comparePane = page.locator('[data-testid="compare-pane"]');
+    await expect(comparePane).toBeVisible();
+    await expect(comparePane.locator('[data-testid="status-pending"]')).toHaveCount(0);
+
+    // Click to select Documents, then double-click to enter
+    await comparePane.locator('[data-testid="compare-row-Documents"]').dblclick();
+    await expect(comparePane.locator('[data-testid="compare-row-report.pdf"]')).toBeVisible();
+
+    // ".." is selected by default — press Enter to go up
+    await page.keyboard.press("Enter");
+
+    // Documents should be re-selected
+    await expect(comparePane.locator('[data-testid="compare-row-Documents"].selected')).toBeVisible();
+  });
+
+  test("deep navigation preserves selection at each level", async ({ page }) => {
+    await setupMirrorForCompare(page);
+    await page.keyboard.press("g");
+    const comparePane = page.locator('[data-testid="compare-pane"]');
+    await expect(comparePane).toBeVisible();
+    await expect(comparePane.locator('[data-testid="status-pending"]')).toHaveCount(0);
+
+    // Select and enter Projects (4th dir: Desktop, Documents, Downloads, Projects)
+    await page.keyboard.press("ArrowDown"); // Desktop
+    await page.keyboard.press("ArrowDown"); // Documents
+    await page.keyboard.press("ArrowDown"); // Downloads
+    await page.keyboard.press("ArrowDown"); // Projects
+    await page.keyboard.press("Enter");
+
+    // Now in Projects: my-app (dir), README.md (file)
+    await expect(comparePane.locator('[data-testid="compare-row-my-app"]')).toBeVisible();
+
+    // Select and enter my-app
+    await page.keyboard.press("ArrowDown"); // my-app
+    await page.keyboard.press("Enter");
+
+    // Now in Projects/my-app: src (dir), index.html, package.json
+    await expect(comparePane.locator('[data-testid="compare-row-package.json"]')).toBeVisible();
+
+    // Go back to Projects — my-app should be selected
+    await page.keyboard.press("Backspace");
+    await expect(comparePane.locator('[data-testid="compare-row-my-app"].selected')).toBeVisible();
+
+    // Go back to root — Projects should be selected
+    await page.keyboard.press("Backspace");
+    await expect(comparePane.locator('[data-testid="compare-row-Projects"].selected')).toBeVisible();
+  });
+
+  test("scroll position is preserved when navigating back", async ({ page }) => {
+    // Use very small viewport so the expanded Documents directory requires scrolling
+    // 19 rows (.. + 10 dirs + 8 files) at 28px each = 532px content
+    // With 250px viewport, scroll container is ~150px → plenty of scrolling needed
+    await page.setViewportSize({ width: 800, height: 250 });
+
+    await setupMirrorForCompare(page);
+    await page.keyboard.press("g");
+    const comparePane = page.locator('[data-testid="compare-pane"]');
+    await expect(comparePane).toBeVisible();
+    await expect(comparePane.locator('[data-testid="status-pending"]')).toHaveCount(0);
+
+    // Navigate into Documents (has 10 dirs + 8 files = 18 entries)
+    await comparePane.locator('[data-testid="compare-row-Documents"]').dblclick();
+    await expect(comparePane.locator('[data-testid="compare-row-work"]')).toBeVisible();
+    await expect(comparePane.locator('[data-testid="status-pending"]')).toHaveCount(0);
+
+    // Arrow down to "work" directory (10th dir — requires scrolling in small viewport)
+    for (let i = 0; i < 10; i++) {
+      await page.keyboard.press("ArrowDown");
+    }
+    await expect(comparePane.locator('[data-testid="compare-row-work"].selected')).toBeVisible();
+
+    // Capture scroll position (should be non-zero after scrolling down)
+    const scrollContainer = comparePane.locator(".scroll-container");
+    const scrollBefore = await scrollContainer.evaluate((el) => el.scrollTop);
+    expect(scrollBefore).toBeGreaterThan(0);
+
+    // Navigate into "work" directory
+    await page.keyboard.press("Enter");
+    await expect(comparePane.locator('[data-testid="compare-row-proposal.pdf"]')).toBeVisible();
+
+    // Go back
+    await page.keyboard.press("Backspace");
+
+    // Verify selection is restored
+    await expect(comparePane.locator('[data-testid="compare-row-work"].selected')).toBeVisible();
+
+    // Verify scroll position is restored
+    const scrollAfter = await scrollContainer.evaluate((el) => el.scrollTop);
+    expect(scrollAfter).toBe(scrollBefore);
   });
 });
 

@@ -25,8 +25,33 @@ export async function injectTauriMocks(page: import("@playwright/test").Page) {
         { name: "notes.txt", kind: "file", size: 512, modified: 1698000000000 },
       ],
       [`${HOME}/Documents`]: [
+        { name: "archive", kind: "dir", size: 0, modified: 1699000000000 },
+        { name: "cache", kind: "dir", size: 0, modified: 1699000000000 },
+        { name: "drafts", kind: "dir", size: 0, modified: 1699000000000 },
+        { name: "exports", kind: "dir", size: 0, modified: 1699000000000 },
+        { name: "images", kind: "dir", size: 0, modified: 1699000000000 },
+        { name: "logs", kind: "dir", size: 0, modified: 1699000000000 },
         { name: "photos", kind: "dir", size: 0, modified: 1699000000000 },
+        { name: "scripts", kind: "dir", size: 0, modified: 1699000000000 },
+        { name: "templates", kind: "dir", size: 0, modified: 1699000000000 },
+        { name: "work", kind: "dir", size: 0, modified: 1699000000000 },
+        { name: "backup.zip", kind: "file", size: 16384, modified: 1700000000000 },
+        { name: "budget.xlsx", kind: "file", size: 2048, modified: 1700000000000 },
+        { name: "config.json", kind: "file", size: 64, modified: 1700000000000 },
+        { name: "data.csv", kind: "file", size: 8192, modified: 1700000000000 },
+        { name: "notes.md", kind: "file", size: 512, modified: 1700000000000 },
         { name: "report.pdf", kind: "file", size: 1048576, modified: 1700000000000 },
+        { name: "spec.docx", kind: "file", size: 4096, modified: 1700000000000 },
+        { name: "todo.txt", kind: "file", size: 128, modified: 1700000000000 },
+      ],
+      [`${HOME}/Documents/archive`]: [
+        { name: "old-backup.zip", kind: "file", size: 2048, modified: 1699000000000 },
+      ],
+      [`${HOME}/Documents/work`]: [
+        { name: "proposal.pdf", kind: "file", size: 1024, modified: 1700000000000 },
+      ],
+      [`${HOME}/Documents/logs`]: [
+        { name: "app.log", kind: "file", size: 1024, modified: 1700000000000 },
       ],
       [`${HOME}/Desktop`]: [
         { name: "todo.txt", kind: "file", size: 128, modified: 1700100000000 },
@@ -54,6 +79,15 @@ export async function injectTauriMocks(page: import("@playwright/test").Page) {
         { name: "testuser", kind: "dir", size: 0, modified: 1700000000000 },
       ],
     };
+
+    // Create mirror of home directory at /Users/mirror for compare tests
+    // (same content, different path — needed because canCompare rejects same-path)
+    const MIRROR = "/Users/mirror";
+    const homeKeys = Object.keys(fakeFS).filter(k => k.startsWith(HOME));
+    for (const key of homeKeys) {
+      fakeFS[MIRROR + key.slice(HOME.length)] = [...fakeFS[key]];
+    }
+    fakeFS["/Users"].push({ name: "mirror", kind: "dir", size: 0, modified: 1700000000000 });
 
     let leftRoot: string | null = null;
     let rightRoot: string | null = null;
@@ -395,6 +429,7 @@ export async function injectTauriMocks(page: import("@playwright/test").Page) {
         if (cmd === "export_report") return null;
         if (cmd === "open_file") return null;
         if (cmd === "copy_entry") return null;
+        if (cmd === "copy_entry_overwrite") return null;
         if (cmd === "move_entry") return null;
         if (cmd === "create_directory") {
           const parentEntries = fakeFS[args.parentPath];

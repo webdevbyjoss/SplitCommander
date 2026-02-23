@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import type { CompareEntry, SyncAction } from "../types";
   import { compareStore } from "../stores/compare.svelte";
 
@@ -148,14 +149,7 @@
     } else if (e.key === "Enter") {
       e.preventDefault();
       if (compareStore.compareSelectedIndex === -1) {
-        if (!compareStore.isAtCompareRoot) {
-          const relPath = compareStore.compareRelPath;
-          navHistory.set(relPath, {
-            selectedIndex: compareStore.compareSelectedIndex,
-            scrollTop: containerEl?.scrollTop ?? 0,
-          });
-          compareStore.navigateCompareUp();
-        }
+        await navigateUp();
       } else {
         const entry = entries[compareStore.compareSelectedIndex];
         if (!entry) return;
@@ -184,13 +178,7 @@
       }
     } else if (e.key === "Backspace") {
       e.preventDefault();
-      if (!compareStore.isAtCompareRoot) {
-        navHistory.set(compareStore.compareRelPath, {
-          selectedIndex: compareStore.compareSelectedIndex,
-          scrollTop: containerEl?.scrollTop ?? 0,
-        });
-        compareStore.navigateCompareUp();
-      }
+      await navigateUp();
     } else if (e.key === "Tab" && !e.metaKey && !e.ctrlKey) {
       activeSide = activeSide === "left" ? "right" : "left";
     } else if (e.key === "Home") {
@@ -214,6 +202,27 @@
     }
   }
 
+  async function navigateUp() {
+    if (compareStore.isAtCompareRoot) return;
+    // Compute parent relPath before navigating
+    const parts = compareStore.compareRelPath.split("/");
+    parts.pop();
+    const parentRelPath = parts.join("/");
+
+    await compareStore.navigateCompareUp();
+
+    // Restore saved parent state
+    const saved = navHistory.get(parentRelPath);
+    if (saved) {
+      compareStore.compareSelectedIndex = saved.selectedIndex;
+      // Update reactive scrollTop so virtual scroll renders correct rows
+      scrollTop = saved.scrollTop;
+      await tick();
+      // Now set actual DOM scroll position
+      if (containerEl) containerEl.scrollTop = saved.scrollTop;
+    }
+  }
+
   function buildFilePath(name: string): string {
     return compareStore.compareRelPath ? compareStore.compareRelPath + "/" + name : name;
   }
@@ -222,15 +231,9 @@
     compareStore.compareSelectedIndex = index;
   }
 
-  function handleRowDblClick(index: number) {
+  async function handleRowDblClick(index: number) {
     if (index === -1) {
-      if (!compareStore.isAtCompareRoot) {
-        navHistory.set(compareStore.compareRelPath, {
-          selectedIndex: compareStore.compareSelectedIndex,
-          scrollTop: containerEl?.scrollTop ?? 0,
-        });
-        compareStore.navigateCompareUp();
-      }
+      await navigateUp();
     } else {
       const entry = entries[index];
       if (entry && entry.kind === "dir") {
