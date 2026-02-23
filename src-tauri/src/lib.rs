@@ -18,6 +18,7 @@ pub fn run() {
             core::commands::list_directory,
             core::commands::open_file,
             core::commands::copy_entry,
+            core::commands::copy_entry_overwrite,
             core::commands::move_entry,
             core::commands::create_directory,
             core::commands::delete_entry,

@@ -304,6 +304,25 @@ pub async fn copy_entry(source_path: String, dest_dir: String) -> Result<(), Str
         .map(|_| ())
 }
 
+/// Copies a file or directory, overwriting destination if it exists.
+#[tauri::command]
+pub async fn copy_entry_overwrite(source_path: String, dest_dir: String) -> Result<(), String> {
+    let src = PathBuf::from(&source_path);
+    let dst = PathBuf::from(&dest_dir);
+
+    if !src.exists() {
+        return Err(format!("Source does not exist: {}", source_path));
+    }
+    if !dst.is_dir() {
+        return Err(format!("Destination is not a directory: {}", dest_dir));
+    }
+
+    tokio::task::spawn_blocking(move || fileops::copy_entry_overwrite(&src, &dst))
+        .await
+        .map_err(|e| format!("Task failed: {}", e))?
+        .map(|_| ())
+}
+
 /// Moves a file or directory from source to the destination directory.
 #[tauri::command]
 pub async fn move_entry(source_path: String, dest_dir: String) -> Result<(), String> {

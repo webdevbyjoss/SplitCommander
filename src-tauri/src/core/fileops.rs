@@ -24,6 +24,31 @@ pub fn copy_entry(src: &Path, dest_dir: &Path) -> Result<PathBuf, String> {
     Ok(dest)
 }
 
+/// Copies a file or directory from `src` to `dest_dir/<src_name>`, overwriting if destination exists.
+pub fn copy_entry_overwrite(src: &Path, dest_dir: &Path) -> Result<PathBuf, String> {
+    let name = src
+        .file_name()
+        .ok_or_else(|| "Invalid source path".to_string())?;
+    let dest = dest_dir.join(name);
+
+    // Remove existing destination if present
+    if dest.exists() {
+        if dest.is_dir() {
+            fs::remove_dir_all(&dest).map_err(|e| format!("Cannot remove existing: {}", e))?;
+        } else {
+            fs::remove_file(&dest).map_err(|e| format!("Cannot remove existing: {}", e))?;
+        }
+    }
+
+    if src.is_dir() {
+        copy_dir_recursive(src, &dest)?;
+    } else {
+        fs::copy(src, &dest).map_err(|e| format!("Copy failed: {}", e))?;
+    }
+
+    Ok(dest)
+}
+
 /// Moves a file or directory from `src` to `dest_dir/<src_name>`.
 /// Uses `fs::rename` when possible, falls back to copy+delete for cross-filesystem moves.
 pub fn move_entry(src: &Path, dest_dir: &Path) -> Result<PathBuf, String> {
@@ -238,6 +263,36 @@ mod tests {
         let result = delete_entry(&dir.join("doomed.txt"));
         assert!(result.is_ok());
         assert!(!dir.join("doomed.txt").exists());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_copy_overwrite_file() {
+        let dir = test_dir("copy_overwrite");
+        fs::create_dir_all(dir.join("src")).unwrap();
+        fs::create_dir_all(dir.join("dst")).unwrap();
+        fs::write(dir.join("src/test.txt"), "new content").unwrap();
+        fs::write(dir.join("dst/test.txt"), "old content").unwrap();
+
+        let result = copy_entry_overwrite(&dir.join("src/test.txt"), &dir.join("dst"));
+        assert!(result.is_ok());
+        assert_eq!(fs::read_to_string(dir.join("dst/test.txt")).unwrap(), "new content");
+        assert!(dir.join("src/test.txt").exists());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_copy_overwrite_no_existing() {
+        let dir = test_dir("copy_overwrite_new");
+        fs::create_dir_all(dir.join("src")).unwrap();
+        fs::create_dir_all(dir.join("dst")).unwrap();
+        fs::write(dir.join("src/test.txt"), "hello").unwrap();
+
+        let result = copy_entry_overwrite(&dir.join("src/test.txt"), &dir.join("dst"));
+        assert!(result.is_ok());
+        assert_eq!(fs::read_to_string(dir.join("dst/test.txt")).unwrap(), "hello");
 
         let _ = fs::remove_dir_all(&dir);
     }
