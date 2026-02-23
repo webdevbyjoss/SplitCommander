@@ -202,7 +202,7 @@
     }
   }
 
-  function handlePaneKeydown(e: KeyboardEvent) {
+  async function handlePaneKeydown(e: KeyboardEvent) {
     if (!isActive) return;
     if (compareStore.mkdirPromptActive) return;
 
@@ -228,8 +228,10 @@
         const entry = sortedEntries[selectedIndex];
         if (entry && (entry.kind === "dir" || entry.kind === "symlink")) {
           const currentPath = side === "left" ? compareStore.leftPath : compareStore.rightPath;
-          navHistory.set(currentPath, { selectedIndex, scrollTop: containerEl?.scrollTop ?? 0 });
-          compareStore.navigateTo(side, entry.name);
+          const ok = await compareStore.navigateTo(side, entry.name);
+          if (ok) {
+            navHistory.set(currentPath, { selectedIndex, scrollTop: containerEl?.scrollTop ?? 0 });
+          }
         } else if (entry && entry.kind === "file") {
           compareStore.openFile(side, entry.name);
         }
@@ -315,15 +317,17 @@
     compareStore.reportPaneState(side, index, containerEl?.scrollTop ?? 0);
   }
 
-  function handleRowDblClick(index: number) {
+  async function handleRowDblClick(index: number) {
     if (index === -1) {
       if (!isRoot) goUp();
     } else {
       const entry = sortedEntries[index];
       if (entry && (entry.kind === "dir" || entry.kind === "symlink")) {
         const currentPath = side === "left" ? compareStore.leftPath : compareStore.rightPath;
-        navHistory.set(currentPath, { selectedIndex, scrollTop: containerEl?.scrollTop ?? 0 });
-        compareStore.navigateTo(side, entry.name);
+        const ok = await compareStore.navigateTo(side, entry.name);
+        if (ok) {
+          navHistory.set(currentPath, { selectedIndex, scrollTop: containerEl?.scrollTop ?? 0 });
+        }
       } else if (entry && entry.kind === "file") {
         compareStore.openFile(side, entry.name);
       }

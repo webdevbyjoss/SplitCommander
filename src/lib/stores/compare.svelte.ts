@@ -246,10 +246,10 @@ class CompareStore {
     }
   }
 
-  async navigateTo(side: "left" | "right", dirName: string) {
+  async navigateTo(side: "left" | "right", dirName: string): Promise<boolean> {
     const currentPath = side === "left" ? this.leftPath : this.rightPath;
     const newPath = currentPath + "/" + dirName;
-    await this.loadDirectory(side, newPath);
+    return await this.loadDirectory(side, newPath);
   }
 
   async navigateUp(side: "left" | "right") {
