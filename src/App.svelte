@@ -19,8 +19,9 @@
   });
 
   function handleKeydown(e: KeyboardEvent) {
-    // Backtick toggles terminal (unless focused in terminal panel)
+    // Backtick toggles terminal (browse mode only, not in terminal panel)
     if (e.key === "`" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (compareStore.appMode === "compare") return;
       const inTerminal = (e.target as HTMLElement)?.closest?.(".terminal-panel");
       if (!inTerminal) {
         e.preventDefault();
@@ -38,6 +39,7 @@
 
     if (e.key === "Tab" && !e.metaKey && !e.ctrlKey) {
       e.preventDefault();
+      if (compareStore.appMode === "compare") return;
       compareStore.switchPane();
       // Sync terminal active side and spawn if needed
       if (terminalStore.visible) {
@@ -119,7 +121,28 @@
   </div>
 
   <TerminalPanel />
-  <BottomBar />
+  <BottomBar>
+    {#if terminalStore.visible}
+      <span class="key-hint"><kbd>Tab</kbd> pane</span>
+      <span class="key-hint"><kbd>Esc Esc</kbd> close terminal</span>
+    {:else if compareStore.appMode === "browse"}
+      <span class="key-hint"><kbd>Tab</kbd> pane</span>
+      <span class="key-hint"><kbd>c</kbd> copy</span>
+      <span class="key-hint"><kbd>m</kbd> move</span>
+      <span class="key-hint"><kbd>d</kbd> delete</span>
+      <span class="key-hint"><kbd>t</kbd> mkdir</span>
+      <span class="key-hint"><kbd>g</kbd> compare</span>
+      <span class="key-hint"><kbd>`</kbd> terminal</span>
+      <span class="key-hint"><kbd>q</kbd> quit</span>
+    {:else}
+      <span class="key-hint"><kbd>↑↓</kbd> move</span>
+      <span class="key-hint"><kbd>Enter</kbd> open</span>
+      <span class="key-hint"><kbd>Bksp</kbd> up</span>
+      <span class="key-hint"><kbd>s</kbd> {compareStore.showIdentical ? "hide" : "show"} same</span>
+      <span class="key-hint"><kbd>Esc</kbd> browse</span>
+      <span class="key-hint"><kbd>q</kbd> quit</span>
+    {/if}
+  </BottomBar>
 </div>
 
 <style>

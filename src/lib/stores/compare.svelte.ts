@@ -70,6 +70,7 @@ class CompareStore {
     return (
       this.leftPath !== "" &&
       this.rightPath !== "" &&
+      this.leftPath !== this.rightPath &&
       this.phase !== "scanning-left" &&
       this.phase !== "scanning-right" &&
       this.phase !== "comparing"

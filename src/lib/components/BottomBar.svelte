@@ -1,6 +1,8 @@
 <script lang="ts">
   import { compareStore } from "../stores/compare.svelte";
-  import { terminalStore } from "../stores/terminal.svelte";
+  import type { Snippet } from "svelte";
+
+  let { children }: { children?: Snippet } = $props();
 
   function formatNumber(n: number): string {
     return n.toLocaleString();
@@ -59,25 +61,8 @@
   </div>
 
   <div class="shortcuts">
-    <span class="key-hint"><kbd>Tab</kbd> pane</span>
-    {#if terminalStore.visible}
-      <span class="key-hint"><kbd>Esc Esc</kbd> close terminal</span>
-    {:else if compareStore.appMode === "browse"}
-      <span class="key-hint"><kbd>c</kbd> copy</span>
-      <span class="key-hint"><kbd>m</kbd> move</span>
-      <span class="key-hint"><kbd>d</kbd> delete</span>
-      <span class="key-hint"><kbd>t</kbd> mkdir</span>
-      <span class="key-hint"><kbd>g</kbd> compare</span>
-      <span class="key-hint"><kbd>`</kbd> terminal</span>
-      <span class="key-hint"><kbd>q</kbd> quit</span>
-    {:else}
-      <span class="key-hint"><kbd>↑↓</kbd> move</span>
-      <span class="key-hint"><kbd>Enter</kbd> open</span>
-      <span class="key-hint"><kbd>Bksp</kbd> up</span>
-      <span class="key-hint"><kbd>s</kbd> {compareStore.showIdentical ? "hide" : "show"} same</span>
-      <span class="key-hint"><kbd>Esc</kbd> browse</span>
-      <span class="key-hint"><kbd>`</kbd> terminal</span>
-      <span class="key-hint"><kbd>q</kbd> quit</span>
+    {#if children}
+      {@render children()}
     {/if}
   </div>
 </footer>
@@ -176,12 +161,12 @@
     flex-shrink: 0;
   }
 
-  .key-hint {
+  .shortcuts :global(.key-hint) {
     color: var(--text-secondary);
     font-size: 10px;
   }
 
-  kbd {
+  .shortcuts :global(kbd) {
     display: inline-block;
     padding: 0 4px;
     background: var(--surface-2);
