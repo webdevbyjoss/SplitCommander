@@ -14,6 +14,7 @@ import type {
   CompareDonePayload,
   CompareErrorPayload,
   DirStatusResolvedPayload,
+  SyncAction,
 } from "../types";
 import { terminalStore } from "./terminal.svelte";
 
@@ -573,6 +574,72 @@ class CompareStore {
       await getCurrentWindow().close();
     } catch {
       // Fallback: ignore
+    }
+  }
+
+  getSyncActions(entry: CompareEntry): SyncAction[] {
+    const name = entry.name;
+    if (entry.status === "same" || entry.status === "pending" || entry.status === "typeMismatch") {
+      return [];
+    }
+    // metaDiff directories: no actions (navigate inside instead)
+    if (entry.status === "modified" && entry.kind === "dir") {
+      return [];
+    }
+    const actions: SyncAction[] = [];
+    if (entry.status === "onlyLeft") {
+      actions.push({ kind: "copyToRight", label: "Copy to right", entryName: name });
+      actions.push({ kind: "deleteLeft", label: "Delete from left", entryName: name });
+    } else if (entry.status === "onlyRight") {
+      actions.push({ kind: "copyToLeft", label: "Copy to left", entryName: name });
+      actions.push({ kind: "deleteRight", label: "Delete from right", entryName: name });
+    } else if (entry.status === "modified") {
+      // metaDiff file: both directions + delete each
+      actions.push({ kind: "overwriteToRight", label: "Copy left \u2192 right", entryName: name });
+      actions.push({ kind: "overwriteToLeft", label: "Copy right \u2192 left", entryName: name });
+      actions.push({ kind: "deleteLeft", label: "Delete from left", entryName: name });
+      actions.push({ kind: "deleteRight", label: "Delete from right", entryName: name });
+    }
+    return actions;
+  }
+
+  async executeSyncAction(action: SyncAction): Promise<boolean> {
+    const leftDir = this.compareRelPath
+      ? this.leftRoot + "/" + this.compareRelPath
+      : this.leftRoot!;
+    const rightDir = this.compareRelPath
+      ? this.rightRoot + "/" + this.compareRelPath
+      : this.rightRoot!;
+    const leftPath = leftDir + "/" + action.entryName;
+    const rightPath = rightDir + "/" + action.entryName;
+
+    try {
+      switch (action.kind) {
+        case "copyToRight":
+          await invoke("copy_entry", { sourcePath: leftPath, destDir: rightDir });
+          break;
+        case "copyToLeft":
+          await invoke("copy_entry", { sourcePath: rightPath, destDir: leftDir });
+          break;
+        case "overwriteToRight":
+          await invoke("copy_entry_overwrite", { sourcePath: leftPath, destDir: rightDir });
+          break;
+        case "overwriteToLeft":
+          await invoke("copy_entry_overwrite", { sourcePath: rightPath, destDir: leftDir });
+          break;
+        case "deleteLeft":
+          await invoke("delete_entry", { targetPath: leftPath });
+          break;
+        case "deleteRight":
+          await invoke("delete_entry", { targetPath: rightPath });
+          break;
+      }
+      // Refresh the current compare directory
+      await this.loadCompareDirectory();
+      return true;
+    } catch (e) {
+      this.setError(`Sync failed: ${e}`);
+      return false;
     }
   }
 }

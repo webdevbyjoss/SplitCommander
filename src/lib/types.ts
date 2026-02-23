@@ -102,3 +102,11 @@ export interface TerminalOutputPayload {
 export interface TerminalExitPayload {
   side: "left" | "right";
 }
+
+export type SyncActionKind = "copyToRight" | "copyToLeft" | "deleteLeft" | "deleteRight" | "overwriteToRight" | "overwriteToLeft";
+
+export interface SyncAction {
+  kind: SyncActionKind;
+  label: string;
+  entryName: string;
+}
