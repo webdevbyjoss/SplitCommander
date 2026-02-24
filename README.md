@@ -2,7 +2,7 @@
 
 A keyboard-first, two-pane file manager for macOS with directory comparison. Built with Tauri v2 (Rust) and Svelte 5 (TypeScript).
 
-![Browse Mode](docs/screenshots/browse.png)
+<img src="docs/screenshots/browse.png" alt="Browse Mode" width="100%">
 
 ## Features
 
@@ -12,9 +12,6 @@ A keyboard-first, two-pane file manager for macOS with directory comparison. Bui
 - **Built-in terminal** — dual-pane terminal panel that follows your current directory
 - **Fast** — parallel scanning with jwalk, virtual scrolling for 200k+ file lists
 - **Dark & light themes** — follows your system preference
-- **Read-only by design** — comparison only, no accidental writes
-
-![Compare Mode](docs/screenshots/compare.png)
 
 ## Install
 
@@ -77,37 +74,16 @@ SplitCommander is keyboard-driven. The footer bar shows available commands for t
 | `Tab` | Switch terminal pane |
 | `Esc Esc` | Close terminal |
 
-## Architecture
-
-Tauri v2 two-process model:
-
-- **Rust backend** (`src-tauri/src/`) — filesystem scanning, comparison engine, PTY management, JSON export
-- **Svelte 5 frontend** (`src/`) — UI rendering, state management with runes, virtual scrolling
-
-### Comparison pipeline
-
-1. **Scan** — parallel directory walk with [jwalk](https://crates.io/crates/jwalk), progress events streamed to UI
-2. **Compare** — classify diffs (Same, OnlyLeft, OnlyRight, MetaDiff, TypeMismatch)
-3. **Deep verify** — BLAKE3 content hashing (planned)
-
-### Key crates
-
-`tauri 2` | `jwalk` | `serde` | `chrono` | `tokio` | `portable-pty` | `thiserror`
-
 ## Testing
 
 ```bash
-# Rust tests (40 tests covering scanner, comparator, ignore rules, security, export)
+# Rust tests (42 tests covering scanner, comparator, file ops, ignore rules, security, export)
 cd src-tauri && cargo test
 
-# Type-check frontend
-npm run check
+# E2E tests (Playwright)
+npx playwright test
 ```
 
 ## Contributing
 
 Contributions welcome. Please open an issue first to discuss what you'd like to change.
-
-## License
-
-[MIT](LICENSE)
