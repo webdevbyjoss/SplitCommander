@@ -1,6 +1,6 @@
 # SplitCommander
 
-A keyboard-first, two-pane file manager for macOS with directory comparison. Built with Tauri v2 (Rust) and Svelte 5 (TypeScript).
+A keyboard-first, two-pane file manager for macOS with directory comparison.
 
 <img src="docs/screenshots/browse.png" alt="Browse Mode" width="100%">
 
