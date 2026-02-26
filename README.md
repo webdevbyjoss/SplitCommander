@@ -15,13 +15,30 @@ A keyboard-first, two-pane file manager for macOS with directory comparison.
 
 ## Install
 
-### Prerequisites
+### Download
+
+Grab the latest installer from the [Releases](https://github.com/webdevbyjoss/SplitCommander/releases) page:
+
+| Platform | File |
+|----------|------|
+| macOS (Apple Silicon) | `.dmg` aarch64 |
+| macOS (Intel) | `.dmg` x64 |
+| Linux | `.deb` or `.AppImage` |
+| Windows | `.msi` or `.exe` |
+
+**macOS note:** The app is not yet code-signed. After downloading, remove the quarantine flag before opening:
+
+```bash
+xattr -d com.apple.quarantine ~/Downloads/Split.Commander_*.dmg
+```
+
+### Build from source
+
+#### Prerequisites
 
 - [Node.js](https://nodejs.org/) 18+
 - [Rust](https://rustup.rs/) (stable)
 - Xcode Command Line Tools (`xcode-select --install`)
-
-### Build from source
 
 ```bash
 git clone https://github.com/webdevbyjoss/SplitCommander.git
