@@ -15,13 +15,7 @@ pub struct ScanResult {
     /// Lowercased relative path → original-case relative path
     pub originals: HashMap<String, String>,
     pub count: usize,
-    pub errors: Vec<ScanError>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ScanError {
-    pub path: String,
-    pub message: String,
+    pub errors: usize,
 }
 
 /// Scans a directory root in parallel using jwalk.
@@ -37,7 +31,7 @@ pub fn scan_directory(
 ) -> Result<ScanResult, String> {
     let mut entries = HashMap::new();
     let mut originals = HashMap::new();
-    let mut errors = Vec::new();
+    let mut errors = 0usize;
     let mut count: usize = 0;
 
     let walker = WalkDir::new(root)
@@ -85,11 +79,8 @@ pub fn scan_directory(
                             .map(|d| d.as_millis() as u64);
                         (size, modified)
                     }
-                    Err(e) => {
-                        errors.push(ScanError {
-                            path: rel_path.clone(),
-                            message: e.to_string(),
-                        });
+                    Err(_) => {
+                        errors += 1;
                         (0, None)
                     }
                 };
@@ -114,15 +105,12 @@ pub fn scan_directory(
                 entries.insert(key, meta);
 
                 count += 1;
-                if count % 1000 == 0 {
+                if count.is_multiple_of(1000) {
                     progress_callback(count);
                 }
             }
-            Err(e) => {
-                errors.push(ScanError {
-                    path: "unknown".to_string(),
-                    message: e.to_string(),
-                });
+            Err(_) => {
+                errors += 1;
             }
         }
     }

@@ -17,10 +17,12 @@ pub fn compare(
     cancel_flag: &AtomicBool,
 ) -> Result<CompareResult, String> {
     let mut diffs = Vec::new();
-    let mut summary = CompareSummary::default();
-
-    summary.total_left = left.entries.len();
-    summary.total_right = right.entries.len();
+    let mut summary = CompareSummary {
+        total_left: left.entries.len(),
+        total_right: right.entries.len(),
+        errors: left.errors + right.errors,
+        ..Default::default()
+    };
 
     let all_keys: HashSet<&String> = left.entries.keys().chain(right.entries.keys()).collect();
 
@@ -69,7 +71,7 @@ pub fn compare(
     }
 
     // Sort diffs by path for consistent output
-    diffs.sort_by(|a, b| a.rel_path.to_lowercase().cmp(&b.rel_path.to_lowercase()));
+    diffs.sort_by_key(|a| a.rel_path.to_lowercase());
 
     Ok(CompareResult { diffs, summary })
 }
@@ -161,7 +163,7 @@ mod tests {
             count: map.len(),
             entries: map,
             originals,
-            errors: vec![],
+            errors: 0,
         }
     }
 

@@ -264,6 +264,7 @@
       case "onlyRight": return "only \u2192";
       case "typeMismatch": return "type!";
       case "pending": return "";
+      case "error": return "error";
       default: return "";
     }
   }
@@ -334,6 +335,7 @@
         {#each visibleRows as row (row.index)}
           {#if row.entry === null}
             <!-- ".." go-up row -->
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
             <div
               class="row go-up"
               class:selected={compareStore.compareSelectedIndex === -1}
@@ -356,6 +358,7 @@
             </div>
           {:else}
             {@const entry = row.entry}
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
             <div
               class="row status-{entry.status}"
               class:selected={compareStore.compareSelectedIndex === row.index}
@@ -611,6 +614,11 @@
     color: var(--diff-error);
   }
 
+  .row.status-error .col-left-name,
+  .row.status-error .col-right-name {
+    color: var(--diff-error);
+  }
+
   .col-icon {
     width: 24px;
     flex-shrink: 0;
@@ -689,6 +697,11 @@
   }
 
   .status-badge.status-typeMismatch {
+    color: var(--diff-error);
+    background: var(--diff-error-bg);
+  }
+
+  .status-badge.status-error {
     color: var(--diff-error);
     background: var(--diff-error-bg);
   }

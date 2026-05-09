@@ -43,6 +43,9 @@
         {#if compareStore.compareSummary.typeMismatch > 0}
           <span class="sum-item type-mismatch">{formatNumber(compareStore.compareSummary.typeMismatch)} type mismatch</span>
         {/if}
+        {#if compareStore.compareSummary.errors > 0}
+          <span class="sum-item errors">{formatNumber(compareStore.compareSummary.errors)} errors</span>
+        {/if}
       </span>
     {:else if compareStore.phase === "done" && compareStore.summary}
       <span class="summary">
@@ -51,6 +54,9 @@
         <span class="sum-item only-right">{formatNumber(compareStore.summary.onlyRight)} right only</span>
         {#if compareStore.summary.metaDiff > 0}
           <span class="sum-item meta-diff">{formatNumber(compareStore.summary.metaDiff)} modified</span>
+        {/if}
+        {#if compareStore.summary.errors > 0}
+          <span class="sum-item errors">{formatNumber(compareStore.summary.errors)} errors</span>
         {/if}
       </span>
     {/if}
@@ -118,10 +124,6 @@
     color: var(--accent);
   }
 
-  .phase.error {
-    color: var(--danger);
-  }
-
   .progress {
     color: var(--text-secondary);
     font-family: var(--font-mono);
@@ -177,19 +179,4 @@
     line-height: 1.4;
   }
 
-  .export-btn {
-    padding: 2px 8px;
-    background: var(--accent-dim);
-    border: 1px solid var(--accent);
-    border-radius: 4px;
-    color: var(--accent);
-    cursor: pointer;
-    font-size: 10px;
-    font-weight: 600;
-  }
-
-  .export-btn:hover {
-    background: var(--accent);
-    color: var(--surface-0);
-  }
 </style>

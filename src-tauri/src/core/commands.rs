@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::UNIX_EPOCH;
@@ -16,6 +16,7 @@ use crate::core::ignore::IgnoreRules;
 use crate::core::model::*;
 use crate::core::pty;
 use crate::core::scan;
+use crate::core::security;
 
 /// Cache key for resolved directory statuses: (left_path, right_path).
 pub type DirCacheKey = (String, String);
@@ -58,7 +59,11 @@ impl AppState {
 }
 
 #[tauri::command]
-pub async fn set_root(side: String, path: String, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn set_root(
+    side: String,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     let path_buf = PathBuf::from(&path);
     if !path_buf.is_dir() {
         return Err(format!("Not a directory: {}", path));
@@ -70,6 +75,35 @@ pub async fn set_root(side: String, path: String, state: State<'_, AppState>) ->
         _ => return Err(format!("Invalid side: {}", side)),
     }
     Ok(())
+}
+
+fn configured_roots(state: &AppState) -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    if let Some(root) = state.left_root.lock().unwrap().clone() {
+        roots.push(root);
+    }
+    if let Some(root) = state.right_root.lock().unwrap().clone() {
+        roots.push(root);
+    }
+    roots
+}
+
+fn validate_under_configured_roots(state: &AppState, target: &Path) -> Result<(), String> {
+    let roots = configured_roots(state);
+    if roots.is_empty() {
+        return Err("No trusted pane roots are configured".to_string());
+    }
+
+    for root in roots {
+        if security::validate_confinement(&root, target).is_ok() {
+            return Ok(());
+        }
+    }
+
+    Err(format!(
+        "Path is outside the active pane roots: {}",
+        target.display()
+    ))
 }
 
 #[tauri::command]
@@ -116,10 +150,7 @@ pub async fn start_compare(
         }) {
             Ok(r) => r,
             Err(e) => {
-                let _ = app_handle.emit(
-                    EVENT_COMPARE_ERROR,
-                    CompareErrorPayload { message: e },
-                );
+                let _ = app_handle.emit(EVENT_COMPARE_ERROR, CompareErrorPayload { message: e });
                 return;
             }
         };
@@ -135,25 +166,24 @@ pub async fn start_compare(
 
         // Scan right
         let app_right = app_handle.clone();
-        let right_result = match scan::scan_directory(&right_root, &ignore_rules, cancel, &|count| {
-            let _ = app_right.emit(
-                EVENT_SCAN_PROGRESS,
-                ScanProgressPayload {
-                    side: "right".to_string(),
-                    entries_scanned: count,
-                    phase: "scanning".to_string(),
-                },
-            );
-        }) {
-            Ok(r) => r,
-            Err(e) => {
-                let _ = app_handle.emit(
-                    EVENT_COMPARE_ERROR,
-                    CompareErrorPayload { message: e },
+        let right_result =
+            match scan::scan_directory(&right_root, &ignore_rules, cancel, &|count| {
+                let _ = app_right.emit(
+                    EVENT_SCAN_PROGRESS,
+                    ScanProgressPayload {
+                        side: "right".to_string(),
+                        entries_scanned: count,
+                        phase: "scanning".to_string(),
+                    },
                 );
-                return;
-            }
-        };
+            }) {
+                Ok(r) => r,
+                Err(e) => {
+                    let _ =
+                        app_handle.emit(EVENT_COMPARE_ERROR, CompareErrorPayload { message: e });
+                    return;
+                }
+            };
 
         let _ = app_handle.emit(
             EVENT_SCAN_PROGRESS,
@@ -186,10 +216,7 @@ pub async fn start_compare(
                 }
             }
             Err(e) => {
-                let _ = app_handle.emit(
-                    EVENT_COMPARE_ERROR,
-                    CompareErrorPayload { message: e },
-                );
+                let _ = app_handle.emit(EVENT_COMPARE_ERROR, CompareErrorPayload { message: e });
             }
         }
     });
@@ -287,7 +314,11 @@ pub async fn open_file(path: String) -> Result<(), String> {
 
 /// Copies a file or directory from source to the destination directory.
 #[tauri::command]
-pub async fn copy_entry(source_path: String, dest_dir: String) -> Result<(), String> {
+pub async fn copy_entry(
+    source_path: String,
+    dest_dir: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     let src = PathBuf::from(&source_path);
     let dst = PathBuf::from(&dest_dir);
 
@@ -297,6 +328,8 @@ pub async fn copy_entry(source_path: String, dest_dir: String) -> Result<(), Str
     if !dst.is_dir() {
         return Err(format!("Destination is not a directory: {}", dest_dir));
     }
+    validate_under_configured_roots(&state, &src)?;
+    validate_under_configured_roots(&state, &dst)?;
 
     tokio::task::spawn_blocking(move || fileops::copy_entry(&src, &dst))
         .await
@@ -306,7 +339,11 @@ pub async fn copy_entry(source_path: String, dest_dir: String) -> Result<(), Str
 
 /// Copies a file or directory, overwriting destination if it exists.
 #[tauri::command]
-pub async fn copy_entry_overwrite(source_path: String, dest_dir: String) -> Result<(), String> {
+pub async fn copy_entry_overwrite(
+    source_path: String,
+    dest_dir: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     let src = PathBuf::from(&source_path);
     let dst = PathBuf::from(&dest_dir);
 
@@ -316,6 +353,8 @@ pub async fn copy_entry_overwrite(source_path: String, dest_dir: String) -> Resu
     if !dst.is_dir() {
         return Err(format!("Destination is not a directory: {}", dest_dir));
     }
+    validate_under_configured_roots(&state, &src)?;
+    validate_under_configured_roots(&state, &dst)?;
 
     tokio::task::spawn_blocking(move || fileops::copy_entry_overwrite(&src, &dst))
         .await
@@ -325,7 +364,11 @@ pub async fn copy_entry_overwrite(source_path: String, dest_dir: String) -> Resu
 
 /// Moves a file or directory from source to the destination directory.
 #[tauri::command]
-pub async fn move_entry(source_path: String, dest_dir: String) -> Result<(), String> {
+pub async fn move_entry(
+    source_path: String,
+    dest_dir: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     let src = PathBuf::from(&source_path);
     let dst = PathBuf::from(&dest_dir);
 
@@ -335,6 +378,8 @@ pub async fn move_entry(source_path: String, dest_dir: String) -> Result<(), Str
     if !dst.is_dir() {
         return Err(format!("Destination is not a directory: {}", dest_dir));
     }
+    validate_under_configured_roots(&state, &src)?;
+    validate_under_configured_roots(&state, &dst)?;
 
     tokio::task::spawn_blocking(move || fileops::move_entry(&src, &dst))
         .await
@@ -344,12 +389,17 @@ pub async fn move_entry(source_path: String, dest_dir: String) -> Result<(), Str
 
 /// Creates a new directory inside parent_path with the given name.
 #[tauri::command]
-pub async fn create_directory(parent_path: String, name: String) -> Result<(), String> {
+pub async fn create_directory(
+    parent_path: String,
+    name: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     let parent = PathBuf::from(&parent_path);
 
     if !parent.is_dir() {
         return Err(format!("Parent is not a directory: {}", parent_path));
     }
+    validate_under_configured_roots(&state, &parent)?;
 
     tokio::task::spawn_blocking(move || fileops::create_directory(&parent, &name))
         .await
@@ -359,12 +409,13 @@ pub async fn create_directory(parent_path: String, name: String) -> Result<(), S
 
 /// Deletes a file or directory (recursively for directories).
 #[tauri::command]
-pub async fn delete_entry(target_path: String) -> Result<(), String> {
+pub async fn delete_entry(target_path: String, state: State<'_, AppState>) -> Result<(), String> {
     let target = PathBuf::from(&target_path);
 
     if !target.exists() {
         return Err(format!("Does not exist: {}", target_path));
     }
+    validate_under_configured_roots(&state, &target)?;
 
     tokio::task::spawn_blocking(move || fileops::delete_entry(&target))
         .await
@@ -386,8 +437,8 @@ pub struct PersistedState {
 }
 
 fn state_file_path() -> Result<PathBuf, String> {
-    let data_dir = dirs::data_dir()
-        .ok_or_else(|| "Could not determine data directory".to_string())?;
+    let data_dir =
+        dirs::data_dir().ok_or_else(|| "Could not determine data directory".to_string())?;
     Ok(data_dir.join("com.splitcommander.app").join("state.json"))
 }
 
@@ -442,11 +493,9 @@ pub async fn compare_directory(
     let cache = Arc::clone(&state.dir_resolve_cache);
 
     // Run on blocking thread since dir listing does I/O
-    let result = tokio::task::spawn_blocking(move || {
-        compare_directory_impl(&lp, &rp, &cache)
-    })
-    .await
-    .map_err(|e| format!("Task failed: {}", e))?;
+    let result = tokio::task::spawn_blocking(move || compare_directory_impl(&lp, &rp, &cache))
+        .await
+        .map_err(|e| format!("Task failed: {}", e))??;
 
     let (entries, summary) = result;
 
@@ -463,9 +512,9 @@ fn compare_directory_impl(
     left_path: &str,
     right_path: &str,
     cache: &Arc<Mutex<HashMap<DirCacheKey, DirCacheValue>>>,
-) -> (Vec<CompareEntry>, CompareSummary) {
-    let left_entries = list_directory_impl(left_path).unwrap_or_default();
-    let right_entries = list_directory_impl(right_path).unwrap_or_default();
+) -> Result<(Vec<CompareEntry>, CompareSummary), String> {
+    let left_entries = list_directory_impl(left_path)?;
+    let right_entries = list_directory_impl(right_path)?;
 
     let left_map: HashMap<String, &BrowseEntry> = left_entries
         .iter()
@@ -485,10 +534,12 @@ fn compare_directory_impl(
         .collect();
     all_keys.sort();
 
-    let mut entries = Vec::new();
-    let mut summary = CompareSummary::default();
-    summary.total_left = left_entries.len();
-    summary.total_right = right_entries.len();
+    let mut entries = Vec::with_capacity(all_keys.len());
+    let mut summary = CompareSummary {
+        total_left: left_entries.len(),
+        total_right: right_entries.len(),
+        ..Default::default()
+    };
 
     for key in &all_keys {
         let left = left_map.get(key);
@@ -515,10 +566,10 @@ fn compare_directory_impl(
                         let cache_key = (sub_left, sub_right);
                         let cached = cache.lock().unwrap().get(&cache_key).cloned();
                         if let Some((cached_status, cached_size)) = cached {
-                            if cached_status == CompareStatus::Same {
-                                summary.same += 1;
-                            } else {
-                                summary.meta_diff += 1;
+                            match cached_status {
+                                CompareStatus::Same => summary.same += 1,
+                                CompareStatus::Error => summary.errors += 1,
+                                _ => summary.meta_diff += 1,
                             }
                             (
                                 l.name.clone(),
@@ -528,7 +579,9 @@ fn compare_directory_impl(
                                 None,
                                 l.modified,
                                 r.modified,
-                                Some(DirResolveInfo { total_size: cached_size }),
+                                Some(DirResolveInfo {
+                                    total_size: cached_size,
+                                }),
                             )
                         } else {
                             // No cache hit — mark as pending
@@ -619,7 +672,7 @@ fn compare_directory_impl(
             .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
     });
 
-    (entries, summary)
+    Ok((entries, summary))
 }
 
 /// Recursively checks whether two directories have identical contents.
@@ -629,54 +682,46 @@ fn dirs_are_same_recursive_counted(
     left_path: &str,
     right_path: &str,
     cancel: &AtomicBool,
-) -> (bool, u64) {
+) -> Result<(bool, u64), String> {
     if cancel.load(Ordering::Relaxed) {
-        return (false, 0);
+        return Ok((false, 0));
     }
 
     let ignore_rules = IgnoreRules::new(&[]);
 
-    let left_entries = match std::fs::read_dir(left_path) {
-        Ok(rd) => collect_entries(rd, &ignore_rules),
-        Err(_) => Vec::new(),
-    };
-    let right_entries = match std::fs::read_dir(right_path) {
-        Ok(rd) => collect_entries(rd, &ignore_rules),
-        Err(_) => Vec::new(),
-    };
+    let left_entries = std::fs::read_dir(left_path)
+        .map(|rd| collect_entries(rd, &ignore_rules))
+        .map_err(|e| format!("Cannot read {}: {}", left_path, e))?;
+    let right_entries = std::fs::read_dir(right_path)
+        .map(|rd| collect_entries(rd, &ignore_rules))
+        .map_err(|e| format!("Cannot read {}: {}", right_path, e))?;
 
-    let left_map: HashMap<String, (EntryKind, u64)> = left_entries
+    let left_map: HashMap<String, BrowseEntry> = left_entries
         .iter()
-        .map(|e| (e.name.to_lowercase(), (e.kind, e.size)))
+        .map(|e| (e.name.to_lowercase(), e.clone()))
         .collect();
-    let right_map: HashMap<String, (EntryKind, u64)> = right_entries
+    let right_map: HashMap<String, BrowseEntry> = right_entries
         .iter()
-        .map(|e| (e.name.to_lowercase(), (e.kind, e.size)))
+        .map(|e| (e.name.to_lowercase(), e.clone()))
         .collect();
 
     let mut total_size = 0u64;
     let mut is_same = left_map.len() == right_map.len();
 
-    for (key, (l_kind, l_size)) in &left_map {
+    for (key, l_entry) in &left_map {
         if cancel.load(Ordering::Relaxed) {
-            return (false, total_size);
+            return Ok((false, total_size));
         }
 
-        if *l_kind != EntryKind::Dir {
-            total_size += l_size;
+        if l_entry.kind != EntryKind::Dir {
+            total_size += l_entry.size;
         }
 
         if !is_same {
             // Already different, but keep accumulating size
-            if *l_kind == EntryKind::Dir {
-                let l_name = left_entries
-                    .iter()
-                    .find(|e| e.name.to_lowercase() == *key)
-                    .map(|e| &e.name)
-                    .unwrap();
-                let sub_left = format!("{}/{}", left_path, l_name);
-                let (_, sub_size) = dirs_are_same_recursive_counted(&sub_left, &sub_left, cancel);
-                total_size += sub_size;
+            if l_entry.kind == EntryKind::Dir {
+                let sub_left = format!("{}/{}", left_path, l_entry.name);
+                total_size += dir_total_size_counted(&sub_left, cancel)?;
             }
             continue;
         }
@@ -685,36 +730,51 @@ fn dirs_are_same_recursive_counted(
             None => {
                 is_same = false;
             }
-            Some((r_kind, r_size)) => {
-                if l_kind != r_kind {
+            Some(r_entry) => {
+                if l_entry.kind != r_entry.kind {
                     is_same = false;
-                } else if *l_kind == EntryKind::Dir {
-                    let l_name = left_entries
-                        .iter()
-                        .find(|e| e.name.to_lowercase() == *key)
-                        .map(|e| &e.name)
-                        .unwrap();
-                    let r_name = right_entries
-                        .iter()
-                        .find(|e| e.name.to_lowercase() == *key)
-                        .map(|e| &e.name)
-                        .unwrap();
-                    let sub_left = format!("{}/{}", left_path, l_name);
-                    let sub_right = format!("{}/{}", right_path, r_name);
+                } else if l_entry.kind == EntryKind::Dir {
+                    let sub_left = format!("{}/{}", left_path, l_entry.name);
+                    let sub_right = format!("{}/{}", right_path, r_entry.name);
                     let (sub_same, sub_size) =
-                        dirs_are_same_recursive_counted(&sub_left, &sub_right, cancel);
+                        dirs_are_same_recursive_counted(&sub_left, &sub_right, cancel)?;
                     total_size += sub_size;
                     if !sub_same {
                         is_same = false;
                     }
-                } else if l_size != r_size {
+                } else if l_entry.size != r_entry.size {
                     is_same = false;
                 }
             }
         }
     }
 
-    (is_same, total_size)
+    Ok((is_same, total_size))
+}
+
+fn dir_total_size_counted(path: &str, cancel: &AtomicBool) -> Result<u64, String> {
+    if cancel.load(Ordering::Relaxed) {
+        return Ok(0);
+    }
+
+    let ignore_rules = IgnoreRules::new(&[]);
+    let entries = std::fs::read_dir(path)
+        .map(|rd| collect_entries(rd, &ignore_rules))
+        .map_err(|e| format!("Cannot read {}: {}", path, e))?;
+
+    let mut total_size = 0u64;
+    for entry in entries {
+        if cancel.load(Ordering::Relaxed) {
+            return Ok(total_size);
+        }
+        if entry.kind == EntryKind::Dir {
+            let sub_path = format!("{}/{}", path, entry.name);
+            total_size += dir_total_size_counted(&sub_path, cancel)?;
+        } else {
+            total_size += entry.size;
+        }
+    }
+    Ok(total_size)
 }
 
 /// Resolves pending directory statuses one-by-one, emitting events for each.
@@ -763,52 +823,66 @@ pub async fn resolve_dir_statuses(
             }
         }
 
-        // Resolve all pending dirs in parallel — small dirs finish fast
-        std::thread::scope(|s| {
-            for (name, sub_left, sub_right) in pending_dirs {
-                let cancel = &cancel;
-                let cache = &cache;
-                let app = &app;
-                let left_path = &left_path;
-                let right_path = &right_path;
+        let max_workers = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4)
+            .max(1);
 
-                s.spawn(move || {
-                    if cancel.load(Ordering::Relaxed) {
-                        return;
-                    }
-
-                    let (is_same, total_size) =
-                        dirs_are_same_recursive_counted(&sub_left, &sub_right, cancel);
-
-                    if cancel.load(Ordering::Relaxed) {
-                        return;
-                    }
-
-                    let status = if is_same {
-                        CompareStatus::Same
-                    } else {
-                        CompareStatus::Modified
-                    };
-
-                    // Cache the result for reuse on re-navigation
-                    cache.lock().unwrap().insert(
-                        (sub_left, sub_right),
-                        (status, total_size),
-                    );
-
-                    let _ = app.emit(
-                        EVENT_DIR_STATUS_RESOLVED,
-                        DirStatusResolvedPayload {
-                            name,
-                            status,
-                            left_path: left_path.clone(),
-                            right_path: right_path.clone(),
-                            total_size,
-                        },
-                    );
-                });
+        for batch in pending_dirs.chunks(max_workers) {
+            if cancel.load(Ordering::Relaxed) {
+                break;
             }
-        });
+
+            std::thread::scope(|s| {
+                for (name, sub_left, sub_right) in batch.iter().cloned() {
+                    let cancel = &cancel;
+                    let cache = &cache;
+                    let app = &app;
+                    let left_path = &left_path;
+                    let right_path = &right_path;
+
+                    s.spawn(move || {
+                        if cancel.load(Ordering::Relaxed) {
+                            return;
+                        }
+
+                        let resolved =
+                            dirs_are_same_recursive_counted(&sub_left, &sub_right, cancel);
+
+                        if cancel.load(Ordering::Relaxed) {
+                            return;
+                        }
+
+                        let (status, total_size) = match resolved {
+                            Ok((true, total_size)) => (CompareStatus::Same, total_size),
+                            Ok((false, total_size)) => (CompareStatus::Modified, total_size),
+                            Err(message) => {
+                                let _ =
+                                    app.emit(EVENT_COMPARE_ERROR, CompareErrorPayload { message });
+                                (CompareStatus::Error, 0)
+                            }
+                        };
+
+                        // Cache the result for reuse on re-navigation
+                        cache
+                            .lock()
+                            .unwrap()
+                            .insert((sub_left, sub_right), (status, total_size));
+
+                        let _ = app.emit(
+                            EVENT_DIR_STATUS_RESOLVED,
+                            DirStatusResolvedPayload {
+                                name,
+                                status,
+                                left_path: left_path.clone(),
+                                right_path: right_path.clone(),
+                                total_size,
+                            },
+                        );
+                    });
+                }
+            });
+        }
     });
 
     Ok(())
@@ -831,7 +905,10 @@ pub async fn clear_dir_resolve_cache(state: State<'_, AppState>) -> Result<(), S
 // --- Terminal commands ---
 
 /// Returns a reference to the PTY mutex for the given side.
-fn get_pty_mutex<'a>(state: &'a AppState, side: &str) -> Result<&'a Mutex<Option<pty::PtyState>>, String> {
+fn get_pty_mutex<'a>(
+    state: &'a AppState,
+    side: &str,
+) -> Result<&'a Mutex<Option<pty::PtyState>>, String> {
     match side {
         "left" => Ok(&state.pty_left),
         "right" => Ok(&state.pty_right),
@@ -891,9 +968,7 @@ pub async fn spawn_terminal(
         }
         let _ = app_handle.emit(
             EVENT_TERMINAL_EXIT,
-            TerminalExitPayload {
-                side: side_clone,
-            },
+            TerminalExitPayload { side: side_clone },
         );
     });
 
@@ -912,7 +987,9 @@ pub async fn write_terminal(
     let pty_state = pty_lock.as_ref().ok_or("No terminal running")?;
     let mut writer = pty_state.writer.lock().unwrap();
     use std::io::Write;
-    writer.write_all(data.as_bytes()).map_err(|e: std::io::Error| e.to_string())?;
+    writer
+        .write_all(data.as_bytes())
+        .map_err(|e: std::io::Error| e.to_string())?;
     writer.flush().map_err(|e: std::io::Error| e.to_string())?;
     Ok(())
 }
@@ -942,10 +1019,7 @@ pub async fn resize_terminal(
 
 /// Kills the PTY process and cleans up state.
 #[tauri::command]
-pub async fn kill_terminal(
-    side: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn kill_terminal(side: String, state: State<'_, AppState>) -> Result<(), String> {
     let pty_mutex = get_pty_mutex(&state, &side)?;
     let mut pty_lock = pty_mutex.lock().unwrap();
     if let Some(pty_state) = pty_lock.take() {
@@ -960,10 +1034,7 @@ pub async fn kill_terminal(
 }
 
 /// Lightweight entry collection for recursive comparison (no modified time needed).
-fn collect_entries(
-    read_dir: std::fs::ReadDir,
-    ignore_rules: &IgnoreRules,
-) -> Vec<BrowseEntry> {
+fn collect_entries(read_dir: std::fs::ReadDir, ignore_rules: &IgnoreRules) -> Vec<BrowseEntry> {
     let mut entries = Vec::new();
     for entry_result in read_dir {
         let entry = match entry_result {
@@ -979,7 +1050,9 @@ fn collect_entries(
             Err(_) => continue,
         };
         let is_symlink = file_type.is_symlink();
-        let metadata = entry.metadata().or_else(|_| entry.path().symlink_metadata());
+        let metadata = entry
+            .metadata()
+            .or_else(|_| entry.path().symlink_metadata());
         let (kind, size) = match metadata {
             Ok(m) => {
                 let kind = if is_symlink {
@@ -1043,7 +1116,9 @@ fn list_directory_impl(path: &str) -> Result<Vec<BrowseEntry>, String> {
         let is_symlink = file_type.is_symlink();
 
         // metadata() follows symlinks. Fall back to symlink_metadata for broken links.
-        let metadata = entry.metadata().or_else(|_| entry.path().symlink_metadata());
+        let metadata = entry
+            .metadata()
+            .or_else(|_| entry.path().symlink_metadata());
 
         let (kind, size, modified) = match metadata {
             Ok(m) => {
@@ -1092,4 +1167,49 @@ fn list_directory_impl(path: &str) -> Result<Vec<BrowseEntry>, String> {
     });
 
     Ok(entries)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn test_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("sc_commands_{}", name));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn compare_directory_reports_missing_root() {
+        let left = test_dir("missing_root_left");
+        fs::write(left.join("file.txt"), "left").unwrap();
+        let missing = left.join("missing");
+        let cache = Arc::new(Mutex::new(HashMap::new()));
+
+        let result =
+            compare_directory_impl(&left.to_string_lossy(), &missing.to_string_lossy(), &cache);
+
+        assert!(result.is_err());
+
+        let _ = fs::remove_dir_all(&left);
+    }
+
+    #[test]
+    fn path_validation_rejects_paths_outside_configured_roots() {
+        let root = test_dir("confined_root");
+        let outside = test_dir("outside_root");
+        fs::write(outside.join("file.txt"), "outside").unwrap();
+
+        let state = AppState::new();
+        *state.left_root.lock().unwrap() = Some(root.clone());
+
+        let result = validate_under_configured_roots(&state, &outside.join("file.txt"));
+
+        assert!(result.is_err());
+
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&outside);
+    }
 }

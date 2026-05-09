@@ -58,6 +58,11 @@
       // Let terminal panel handle Escape when focused there (double-Escape to close)
       const inTerminal = (e.target as HTMLElement)?.closest?.(".terminal-panel");
       if (inTerminal) return;
+      if (terminalStore.visible) {
+        terminalStore.handleEscape();
+        e.preventDefault();
+        return;
+      }
 
       if (compareStore.isRunning) {
         compareStore.cancelCompare();

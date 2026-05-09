@@ -1,10 +1,10 @@
-pub mod model;
-pub mod ignore;
-pub mod security;
-pub mod scan;
+pub mod commands;
 pub mod compare;
 pub mod events;
 pub mod export;
 pub mod fileops;
+pub mod ignore;
+pub mod model;
 pub mod pty;
-pub mod commands;
+pub mod scan;
+pub mod security;

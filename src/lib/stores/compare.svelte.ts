@@ -67,6 +67,14 @@ class CompareStore {
 
   private unlisteners: UnlistenFn[] = [];
 
+  private async syncRoot(side: "left" | "right", path: string) {
+    try {
+      await invoke("set_root", { side, path });
+    } catch {
+      // Directory loading validates paths; root sync failures surface on file operations.
+    }
+  }
+
   get canCompare(): boolean {
     return (
       this.leftPath !== "" &&
@@ -160,11 +168,12 @@ class CompareStore {
 
         // Update summary counts
         if (this.compareSummary) {
-          const s = { ...this.compareSummary };
-          if (p.status === "same") s.same++;
-          else if (p.status === "modified") s.metaDiff++;
-          this.compareSummary = s;
-        }
+        const s = { ...this.compareSummary };
+        if (p.status === "same") s.same++;
+        else if (p.status === "modified") s.metaDiff++;
+        else if (p.status === "error") s.errors++;
+        this.compareSummary = s;
+      }
       }),
       invoke<{ home: string; entries: BrowseEntry[] }>("init_browse").catch(() => null),
       invoke<{
@@ -194,17 +203,23 @@ class CompareStore {
         this.leftPath = initResult.home;
         this.leftEntries = initResult.entries;
         this.leftInitState = null;
+        await this.syncRoot("left", initResult.home);
       }
       if (!rightOk && initResult) {
         this.rightPath = initResult.home;
         this.rightEntries = [...initResult.entries];
         this.rightInitState = null;
+        await this.syncRoot("right", initResult.home);
       }
     } else if (initResult) {
       this.leftPath = initResult.home;
       this.rightPath = initResult.home;
       this.leftEntries = initResult.entries;
       this.rightEntries = [...initResult.entries];
+      await Promise.all([
+        this.syncRoot("left", initResult.home),
+        this.syncRoot("right", initResult.home),
+      ]);
     }
 
     // Window starts hidden (tauri.conf.json visible:false) — show once content is ready
@@ -237,6 +252,7 @@ class CompareStore {
         this.rightPath = path;
         this.rightEntries = entries;
       }
+      await this.syncRoot(side, path);
       this.setError(null);
       return true;
     } catch (e) {
@@ -278,6 +294,10 @@ class CompareStore {
   async startCompare() {
     // Clear cache from any previous comparison session
     invoke("clear_dir_resolve_cache").catch(() => {});
+    await Promise.all([
+      this.syncRoot("left", this.leftPath),
+      this.syncRoot("right", this.rightPath),
+    ]);
     // Set roots from current browse paths
     this.leftRoot = this.leftPath;
     this.rightRoot = this.rightPath;
@@ -579,7 +599,7 @@ class CompareStore {
 
   getSyncActions(entry: CompareEntry): SyncAction[] {
     const name = entry.name;
-    if (entry.status === "same" || entry.status === "pending" || entry.status === "typeMismatch") {
+    if (entry.status === "same" || entry.status === "pending" || entry.status === "typeMismatch" || entry.status === "error") {
       return [];
     }
     // metaDiff directories: no actions (navigate inside instead)

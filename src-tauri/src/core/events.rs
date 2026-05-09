@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::core::model::{CompareSummary, CompareStatus};
+use crate::core::model::{CompareStatus, CompareSummary};
 
 pub const EVENT_SCAN_PROGRESS: &str = "scan-progress";
 pub const EVENT_COMPARE_DONE: &str = "compare-done";

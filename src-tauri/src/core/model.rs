@@ -68,6 +68,7 @@ pub enum CompareStatus {
     OnlyRight,
     TypeMismatch,
     Pending,
+    Error,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

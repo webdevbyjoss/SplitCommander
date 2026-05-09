@@ -66,7 +66,7 @@ export interface BrowseEntry {
 
 export type AppMode = "browse" | "compare";
 
-export type CompareStatus = "same" | "modified" | "onlyLeft" | "onlyRight" | "typeMismatch" | "pending";
+export type CompareStatus = "same" | "modified" | "onlyLeft" | "onlyRight" | "typeMismatch" | "pending" | "error";
 
 export interface CompareEntry {
   name: string;

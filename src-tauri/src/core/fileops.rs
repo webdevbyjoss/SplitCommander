@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::core::security;
 
@@ -31,21 +32,19 @@ pub fn copy_entry_overwrite(src: &Path, dest_dir: &Path) -> Result<PathBuf, Stri
         .ok_or_else(|| "Invalid source path".to_string())?;
     let dest = dest_dir.join(name);
 
-    // Remove existing destination if present
-    if dest.exists() {
-        if dest.is_dir() {
-            fs::remove_dir_all(&dest).map_err(|e| format!("Cannot remove existing: {}", e))?;
-        } else {
-            fs::remove_file(&dest).map_err(|e| format!("Cannot remove existing: {}", e))?;
-        }
+    if !src.exists() {
+        return Err(format!("Source does not exist: {}", src.display()));
     }
+
+    let tmp = temp_sibling_path(&dest, "copy");
 
     if src.is_dir() {
-        copy_dir_recursive(src, &dest)?;
+        copy_dir_recursive(src, &tmp)?;
     } else {
-        fs::copy(src, &dest).map_err(|e| format!("Copy failed: {}", e))?;
+        fs::copy(src, &tmp).map_err(|e| format!("Copy failed: {}", e))?;
     }
 
+    replace_path(&tmp, &dest)?;
     Ok(dest)
 }
 
@@ -68,12 +67,10 @@ pub fn move_entry(src: &Path, dest_dir: &Path) -> Result<PathBuf, String> {
             // Cross-filesystem: copy then delete
             if src.is_dir() {
                 copy_dir_recursive(src, &dest)?;
-                fs::remove_dir_all(src)
-                    .map_err(|e| format!("Remove source failed: {}", e))?;
+                fs::remove_dir_all(src).map_err(|e| format!("Remove source failed: {}", e))?;
             } else {
                 fs::copy(src, &dest).map_err(|e| format!("Copy failed: {}", e))?;
-                fs::remove_file(src)
-                    .map_err(|e| format!("Remove source failed: {}", e))?;
+                fs::remove_file(src).map_err(|e| format!("Remove source failed: {}", e))?;
             }
             Ok(dest)
         }
@@ -104,12 +101,9 @@ pub fn delete_entry(target: &Path) -> Result<(), String> {
 }
 
 fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<(), String> {
-    fs::create_dir(dest)
-        .map_err(|e| format!("Cannot create {}: {}", dest.display(), e))?;
+    fs::create_dir(dest).map_err(|e| format!("Cannot create {}: {}", dest.display(), e))?;
 
-    for entry in
-        fs::read_dir(src).map_err(|e| format!("Cannot read {}: {}", src.display(), e))?
-    {
+    for entry in fs::read_dir(src).map_err(|e| format!("Cannot read {}: {}", src.display(), e))? {
         let entry = entry.map_err(|e| e.to_string())?;
         let src_path = entry.path();
         let dest_path = dest.join(entry.file_name());
@@ -122,6 +116,54 @@ fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn temp_sibling_path(dest: &Path, operation: &str) -> PathBuf {
+    let parent = dest.parent().unwrap_or_else(|| Path::new("."));
+    let name = dest
+        .file_name()
+        .map(|n| n.to_string_lossy())
+        .unwrap_or_else(|| "entry".into());
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    parent.join(format!(".{}.{}.{}.tmp", name, operation, nonce))
+}
+
+fn replace_path(src_tmp: &Path, dest: &Path) -> Result<(), String> {
+    if !dest.exists() {
+        return fs::rename(src_tmp, dest).map_err(|e| format!("Install replacement failed: {}", e));
+    }
+
+    let backup = temp_sibling_path(dest, "backup");
+    fs::rename(dest, &backup).map_err(|e| format!("Backup existing destination failed: {}", e))?;
+
+    match fs::rename(src_tmp, dest) {
+        Ok(()) => {
+            remove_path(&backup)
+                .map_err(|e| format!("Cleanup backup failed after replacement: {}", e))?;
+            Ok(())
+        }
+        Err(e) => {
+            let restore_result = fs::rename(&backup, dest);
+            if let Err(restore_error) = restore_result {
+                return Err(format!(
+                    "Install replacement failed: {}; restore failed: {}",
+                    e, restore_error
+                ));
+            }
+            Err(format!("Install replacement failed: {}", e))
+        }
+    }
+}
+
+fn remove_path(path: &Path) -> Result<(), std::io::Error> {
+    if path.is_dir() {
+        fs::remove_dir_all(path)
+    } else {
+        fs::remove_file(path)
+    }
 }
 
 #[cfg(test)]
@@ -146,7 +188,10 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), dir.join("dst/test.txt"));
         assert!(dir.join("dst/test.txt").exists());
-        assert_eq!(fs::read_to_string(dir.join("dst/test.txt")).unwrap(), "hello");
+        assert_eq!(
+            fs::read_to_string(dir.join("dst/test.txt")).unwrap(),
+            "hello"
+        );
         // Source still exists
         assert!(dir.join("src/test.txt").exists());
 
@@ -165,7 +210,10 @@ mod tests {
         assert!(result.is_ok());
         assert!(dir.join("dst/src/a.txt").exists());
         assert!(dir.join("dst/src/sub/b.txt").exists());
-        assert_eq!(fs::read_to_string(dir.join("dst/src/sub/b.txt")).unwrap(), "bbb");
+        assert_eq!(
+            fs::read_to_string(dir.join("dst/src/sub/b.txt")).unwrap(),
+            "bbb"
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -182,7 +230,10 @@ mod tests {
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("already exists"));
         // Original not overwritten
-        assert_eq!(fs::read_to_string(dir.join("dst/test.txt")).unwrap(), "existing");
+        assert_eq!(
+            fs::read_to_string(dir.join("dst/test.txt")).unwrap(),
+            "existing"
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -197,7 +248,10 @@ mod tests {
         let result = move_entry(&dir.join("src/test.txt"), &dir.join("dst"));
         assert!(result.is_ok());
         assert!(dir.join("dst/test.txt").exists());
-        assert_eq!(fs::read_to_string(dir.join("dst/test.txt")).unwrap(), "hello");
+        assert_eq!(
+            fs::read_to_string(dir.join("dst/test.txt")).unwrap(),
+            "hello"
+        );
         // Source removed
         assert!(!dir.join("src/test.txt").exists());
 
@@ -216,7 +270,10 @@ mod tests {
         assert!(result.is_err());
         // Source still exists, dest not overwritten
         assert!(dir.join("src/test.txt").exists());
-        assert_eq!(fs::read_to_string(dir.join("dst/test.txt")).unwrap(), "existing");
+        assert_eq!(
+            fs::read_to_string(dir.join("dst/test.txt")).unwrap(),
+            "existing"
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -277,7 +334,10 @@ mod tests {
 
         let result = copy_entry_overwrite(&dir.join("src/test.txt"), &dir.join("dst"));
         assert!(result.is_ok());
-        assert_eq!(fs::read_to_string(dir.join("dst/test.txt")).unwrap(), "new content");
+        assert_eq!(
+            fs::read_to_string(dir.join("dst/test.txt")).unwrap(),
+            "new content"
+        );
         assert!(dir.join("src/test.txt").exists());
 
         let _ = fs::remove_dir_all(&dir);
@@ -292,7 +352,28 @@ mod tests {
 
         let result = copy_entry_overwrite(&dir.join("src/test.txt"), &dir.join("dst"));
         assert!(result.is_ok());
-        assert_eq!(fs::read_to_string(dir.join("dst/test.txt")).unwrap(), "hello");
+        assert_eq!(
+            fs::read_to_string(dir.join("dst/test.txt")).unwrap(),
+            "hello"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_copy_overwrite_preserves_existing_when_source_missing() {
+        let dir = test_dir("copy_overwrite_missing_source");
+        fs::create_dir_all(dir.join("src")).unwrap();
+        fs::create_dir_all(dir.join("dst")).unwrap();
+        fs::write(dir.join("dst/test.txt"), "existing").unwrap();
+
+        let result = copy_entry_overwrite(&dir.join("src/test.txt"), &dir.join("dst"));
+
+        assert!(result.is_err());
+        assert_eq!(
+            fs::read_to_string(dir.join("dst/test.txt")).unwrap(),
+            "existing"
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
