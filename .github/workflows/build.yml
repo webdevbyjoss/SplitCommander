@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  quality:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -23,6 +23,8 @@ jobs:
           cache: npm
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
       - uses: swatinem/rust-cache@v2
         with:
@@ -35,6 +37,27 @@ jobs:
 
       - run: npm ci
 
+      - name: npm audit
+        run: npm audit --audit-level=moderate
+
+      - name: Type-check Svelte and TypeScript
+        run: npm run check -- --output human
+
+      - name: Frontend build
+        run: npm run build
+
+      - name: Rust formatting
+        working-directory: src-tauri
+        run: cargo fmt --check
+
+      - name: Rust compile check
+        working-directory: src-tauri
+        run: cargo check
+
+      - name: Rust static analysis
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
       - name: Rust tests
         working-directory: src-tauri
         run: cargo test
@@ -46,7 +69,7 @@ jobs:
         run: npx playwright test
 
   build:
-    needs: test
+    needs: quality
     strategy:
       fail-fast: false
       matrix:
