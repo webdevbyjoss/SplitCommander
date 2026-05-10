@@ -79,6 +79,11 @@
     }
   }
 
+  function focusRow(index: number) {
+    const row = containerEl?.querySelector<HTMLElement>(`[data-row-index="${index}"]`);
+    row?.focus();
+  }
+
   async function handleKeydown(e: KeyboardEvent) {
     const inInput =
       e.target instanceof HTMLInputElement ||
@@ -220,6 +225,8 @@
       await tick();
       // Now set actual DOM scroll position
       if (containerEl) containerEl.scrollTop = saved.scrollTop;
+      await tick();
+      focusRow(saved.selectedIndex);
     }
   }
 
@@ -229,6 +236,7 @@
 
   function handleRowClick(index: number) {
     compareStore.compareSelectedIndex = index;
+    focusRow(index);
   }
 
   async function handleRowDblClick(index: number) {
@@ -343,6 +351,7 @@
               ondblclick={() => handleRowDblClick(-1)}
               role="button"
               tabindex="-1"
+              data-row-index="-1"
               data-testid="compare-row-parent"
             >
               <span class="col-icon">
@@ -367,6 +376,7 @@
               ondblclick={() => handleRowDblClick(row.index)}
               role="button"
               tabindex="-1"
+              data-row-index={row.index}
               data-testid="compare-row-{entry.name}"
             >
               <span class="col-icon">

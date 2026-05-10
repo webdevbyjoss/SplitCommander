@@ -240,6 +240,32 @@ test.describe("Keyboard navigation", () => {
     await expect(leftPane.locator("text=Desktop")).toBeVisible();
     await expect(leftPane.locator('[data-testid="row-Documents"].selected')).toBeVisible();
   });
+
+  test("going up focuses the directory we came from", async ({ page }) => {
+    const leftPane = page.locator('[data-testid="pane-left"]');
+
+    await leftPane.locator('[data-testid="row-Documents"]').dblclick();
+    await expect(leftPane.locator('[data-testid="row-report.pdf"]')).toBeVisible();
+
+    await page.keyboard.press("Enter");
+
+    const documentsRow = leftPane.locator('[data-testid="row-Documents"]');
+    await expect(documentsRow).toBeVisible();
+    await expect(documentsRow).toBeFocused();
+  });
+
+  test("mouse navigation activates pane before restoring selection", async ({ page }) => {
+    const rightPane = page.locator('[data-testid="pane-right"]');
+
+    // Left pane starts active. Navigate in the right pane using only the mouse.
+    await rightPane.locator('[data-testid="row-Documents"]').dblclick();
+    await expect(rightPane.locator('[data-testid="row-report.pdf"]')).toBeVisible();
+    await expect(rightPane).toHaveClass(/active/);
+
+    // Keyboard navigation should now apply to the right pane and re-select Documents.
+    await page.keyboard.press("Enter");
+    await expect(rightPane.locator('[data-testid="row-Documents"].selected')).toBeVisible();
+  });
 });
 
 test.describe("Compare mode", () => {
@@ -380,6 +406,25 @@ test.describe("Compare mode navigation memory", () => {
 
     // Documents should be re-selected
     await expect(comparePane.locator('[data-testid="compare-row-Documents"].selected')).toBeVisible();
+  });
+
+  test("Backspace focuses the compare directory we came from", async ({ page }) => {
+    await setupMirrorForCompare(page);
+    await page.keyboard.press("g");
+    const comparePane = page.locator('[data-testid="compare-pane"]');
+    await expect(comparePane).toBeVisible();
+    await expect(comparePane.locator('[data-testid="status-pending"]')).toHaveCount(0);
+
+    await page.keyboard.press("ArrowDown"); // Desktop
+    await page.keyboard.press("ArrowDown"); // Documents
+    await page.keyboard.press("Enter");
+    await expect(comparePane.locator('[data-testid="compare-row-report.pdf"]')).toBeVisible();
+
+    await page.keyboard.press("Backspace");
+
+    const documentsRow = comparePane.locator('[data-testid="compare-row-Documents"]');
+    await expect(documentsRow).toBeVisible();
+    await expect(documentsRow).toBeFocused();
   });
 
   test("double-click into directory and '..' Enter returns with selection preserved", async ({ page }) => {
