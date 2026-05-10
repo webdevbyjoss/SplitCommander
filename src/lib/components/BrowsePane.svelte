@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from "svelte";
+  import { tick, untrack } from "svelte";
   import type { BrowseEntry } from "../types";
   import { compareStore } from "../stores/compare.svelte";
 
@@ -152,13 +152,15 @@
       const idx = current.findIndex((e) => e.name === pending);
       selectedIndex = idx >= 0 ? idx : -1;
       selectAfterLoad = null;
-      queueMicrotask(() => {
+      queueMicrotask(async () => {
         if (pendingScroll !== null && containerEl) {
           containerEl.scrollTop = pendingScroll;
           pendingScrollRestore = null;
         } else if (idx >= 0) {
           ensureVisible(idx);
         }
+        await tick();
+        focusRow(selectedIndex);
         compareStore.reportPaneState(side, selectedIndex, containerEl?.scrollTop ?? 0);
       });
     } else {
@@ -202,6 +204,25 @@
     }
   }
 
+  function focusRow(index: number) {
+    const row = containerEl?.querySelector<HTMLElement>(`[data-row-index="${index}"]`);
+    row?.focus();
+  }
+
+  async function enterDirectory(entryName: string, index: number) {
+    const currentPath = side === "left" ? compareStore.leftPath : compareStore.rightPath;
+    const previousHistory = navHistory.get(currentPath);
+    navHistory.set(currentPath, { selectedIndex: index, scrollTop: containerEl?.scrollTop ?? 0 });
+    const ok = await compareStore.navigateTo(side, entryName);
+    if (!ok) {
+      if (previousHistory) {
+        navHistory.set(currentPath, previousHistory);
+      } else {
+        navHistory.delete(currentPath);
+      }
+    }
+  }
+
   async function handlePaneKeydown(e: KeyboardEvent) {
     if (!isActive) return;
     if (compareStore.mkdirPromptActive) return;
@@ -227,11 +248,7 @@
       } else {
         const entry = sortedEntries[selectedIndex];
         if (entry && (entry.kind === "dir" || entry.kind === "symlink")) {
-          const currentPath = side === "left" ? compareStore.leftPath : compareStore.rightPath;
-          const ok = await compareStore.navigateTo(side, entry.name);
-          if (ok) {
-            navHistory.set(currentPath, { selectedIndex, scrollTop: containerEl?.scrollTop ?? 0 });
-          }
+          await enterDirectory(entry.name, selectedIndex);
         } else if (entry && entry.kind === "file") {
           compareStore.openFile(side, entry.name);
         }
@@ -323,11 +340,7 @@
     } else {
       const entry = sortedEntries[index];
       if (entry && (entry.kind === "dir" || entry.kind === "symlink")) {
-        const currentPath = side === "left" ? compareStore.leftPath : compareStore.rightPath;
-        const ok = await compareStore.navigateTo(side, entry.name);
-        if (ok) {
-          navHistory.set(currentPath, { selectedIndex, scrollTop: containerEl?.scrollTop ?? 0 });
-        }
+        await enterDirectory(entry.name, index);
       } else if (entry && entry.kind === "file") {
         compareStore.openFile(side, entry.name);
       }
@@ -451,6 +464,7 @@
               onkeydown={(e) => e.key === "Enter" && handleRowDblClick(-1)}
               role="button"
               tabindex="-1"
+              data-row-index="-1"
               aria-label={isRoot ? "Current directory" : "Go to parent directory"}
               data-testid="row-parent"
             >
@@ -474,6 +488,7 @@
               onkeydown={(e) => e.key === "Enter" && handleRowDblClick(row.index)}
               role="button"
               tabindex="-1"
+              data-row-index={row.index}
               data-testid="row-{row.entry.name}"
             >
               <span class="col-icon">

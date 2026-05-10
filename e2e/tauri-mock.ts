@@ -139,6 +139,18 @@ export async function injectTauriMocks(page: import("@playwright/test").Page) {
         }
 
         if (cmd === "list_directory") {
+          if (
+            args.path === `${HOME}/Desktop` &&
+            (window as any).__mockPermissionGateDesktop &&
+            !(window as any).__mockDesktopPermissionGranted
+          ) {
+            await new Promise<void>((resolve) => {
+              (window as any).__allowMockDesktopPermission = () => {
+                (window as any).__mockDesktopPermissionGranted = true;
+                resolve();
+              };
+            });
+          }
           const entries = fakeFS[args.path];
           if (!entries) throw new Error(`Not a directory: ${args.path}`);
           return [...entries].sort((a, b) => {

@@ -254,6 +254,29 @@ test.describe("Keyboard navigation", () => {
     await expect(documentsRow).toBeFocused();
   });
 
+  test("Backspace restores focus after permission-delayed directory entry", async ({ page }) => {
+    await page.evaluate(() => {
+      (window as any).__mockPermissionGateDesktop = true;
+    });
+
+    const leftPane = page.locator('[data-testid="pane-left"]');
+    await expect(leftPane.locator('[data-testid="row-Desktop"]')).toBeVisible();
+
+    await page.keyboard.press("ArrowDown"); // Desktop
+    await page.keyboard.press("Enter");
+
+    await page.evaluate(() => {
+      (window as any).__allowMockDesktopPermission();
+    });
+
+    await expect(leftPane.locator('[data-testid="row-screenshot.png"]')).toBeVisible();
+    await page.keyboard.press("Backspace");
+
+    const desktopRow = leftPane.locator('[data-testid="row-Desktop"]');
+    await expect(desktopRow).toBeVisible();
+    await expect(desktopRow).toBeFocused();
+  });
+
   test("mouse navigation activates pane before restoring selection", async ({ page }) => {
     const rightPane = page.locator('[data-testid="pane-right"]');
 
