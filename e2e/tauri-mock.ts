@@ -94,6 +94,15 @@ export async function injectTauriMocks(page: import("@playwright/test").Page) {
     let lastDiffs: any[] = [];
     let lastSummary: any = null;
 
+    (window as any).__mockAddDirectory = (parentPath: string, name: string, entries: FakeEntry[]) => {
+      const parentEntries = fakeFS[parentPath] || [];
+      if (!parentEntries.some((entry) => entry.name === name)) {
+        parentEntries.push({ name, kind: "dir", size: 0, modified: 1700000000000 });
+      }
+      fakeFS[parentPath] = parentEntries;
+      fakeFS[`${parentPath}/${name}`] = entries;
+    };
+
     // Event callback registry: eventName -> array of handler callback IDs
     const eventCallbacks: Record<string, number[]> = {};
     let nextCallbackId = 1;

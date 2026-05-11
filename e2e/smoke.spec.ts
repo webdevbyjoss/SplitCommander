@@ -167,6 +167,30 @@ test.describe("Directory navigation", () => {
     // Wait for home dir contents
     await expect(leftPane.locator("text=Documents")).toBeVisible();
   });
+
+  test("breadcrumb parent navigation re-selects Library directory", async ({ page }) => {
+    await page.evaluate(() => {
+      (window as any).__mockAddDirectory("/Users/testuser", "Library", [
+        { name: "Application Support", kind: "dir", size: 0, modified: 1700000000000 },
+        { name: "Preferences", kind: "dir", size: 0, modified: 1700000000000 },
+      ]);
+    });
+
+    const leftPane = page.locator('[data-testid="pane-left"]');
+    await leftPane.locator('[data-testid="row-parent"]').dblclick();
+    await expect(leftPane.locator('[data-testid="row-testuser"]')).toBeVisible();
+    await leftPane.locator('[data-testid="row-testuser"]').dblclick();
+    await expect(leftPane.locator('[data-testid="row-Library"]')).toBeVisible();
+
+    await leftPane.locator('[data-testid="row-Library"]').dblclick();
+    await expect(leftPane.locator('[data-testid="row-Preferences"]')).toBeVisible();
+
+    await page.locator('[data-testid="breadcrumb-left"]').getByRole("button", { name: "testuser" }).click();
+
+    const libraryRow = leftPane.locator('[data-testid="row-Library"]');
+    await expect(libraryRow).toBeVisible();
+    await expect(libraryRow).toBeFocused();
+  });
 });
 
 test.describe("Keyboard navigation", () => {

@@ -223,6 +223,33 @@
     }
   }
 
+  function pathParts(value: string): string[] {
+    return value.split("/").filter(Boolean);
+  }
+
+  function normalizePath(value: string): string {
+    if (value === "/") return value;
+    return value.replace(/\/+$/, "") || "/";
+  }
+
+  function childNameForAncestor(currentPath: string, ancestorPath: string): string | null {
+    const currentParts = pathParts(normalizePath(currentPath));
+    const ancestorParts = pathParts(normalizePath(ancestorPath));
+
+    if (ancestorParts.length >= currentParts.length) return null;
+    for (let i = 0; i < ancestorParts.length; i++) {
+      if (currentParts[i] !== ancestorParts[i]) return null;
+    }
+    return currentParts[ancestorParts.length] ?? null;
+  }
+
+  function prepareReturnSelection(currentPath: string, targetPath: string) {
+    navHistory.set(currentPath, { selectedIndex, scrollTop: containerEl?.scrollTop ?? 0 });
+    selectAfterLoad = childNameForAncestor(currentPath, targetPath);
+    const saved = navHistory.get(targetPath);
+    pendingScrollRestore = saved?.scrollTop ?? null;
+  }
+
   async function handlePaneKeydown(e: KeyboardEvent) {
     if (!isActive) return;
     if (compareStore.mkdirPromptActive) return;
@@ -318,14 +345,9 @@
 
   function goUp() {
     const currentPath = side === "left" ? compareStore.leftPath : compareStore.rightPath;
-    // Save current state so we can restore if we come back
-    navHistory.set(currentPath, { selectedIndex, scrollTop: containerEl?.scrollTop ?? 0 });
     const parts = currentPath.split("/");
-    selectAfterLoad = parts[parts.length - 1] || null;
-    // Look up saved state for parent directory
     const parentPath = parts.slice(0, -1).join("/") || "/";
-    const saved = navHistory.get(parentPath);
-    pendingScrollRestore = saved?.scrollTop ?? null;
+    prepareReturnSelection(currentPath, parentPath);
     compareStore.navigateUp(side);
   }
 
@@ -361,13 +383,8 @@
 
   async function navigateToPath(fullPath: string) {
     const currentPath = side === "left" ? compareStore.leftPath : compareStore.rightPath;
-    navHistory.set(currentPath, { selectedIndex, scrollTop: containerEl?.scrollTop ?? 0 });
-    if (side === "left") {
-      compareStore.leftPath = fullPath;
-    } else {
-      compareStore.rightPath = fullPath;
-    }
-    await compareStore.loadDirectory(side);
+    prepareReturnSelection(currentPath, fullPath);
+    await compareStore.loadDirectory(side, fullPath);
   }
 
   let visibleRows = $derived.by(() => {
